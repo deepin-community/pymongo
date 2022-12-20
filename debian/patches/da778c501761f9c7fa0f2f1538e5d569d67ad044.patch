@@ -1,0 +1,31 @@
+From da778c501761f9c7fa0f2f1538e5d569d67ad044 Mon Sep 17 00:00:00 2001
+From: Shane Harvey <shnhrv@gmail.com>
+Date: Fri, 6 Mar 2020 10:35:41 -0800
+Subject: [PATCH] PYTHON-2150 Fix ObjectId test on 32-bit platforms
+
+---
+ test/test_objectid.py | 11 ++++++++---
+ 1 file changed, 8 insertions(+), 3 deletions(-)
+
+diff --git a/test/test_objectid.py b/test/test_objectid.py
+index 4e66b67fa..08398c4ca 100644
+--- a/test/test_objectid.py
++++ b/test/test_objectid.py
+@@ -189,9 +189,14 @@ def generate_objectid_with_timestamp(timestamp):
+ 
+         for tstamp, exp_datetime_args in TEST_DATA.items():
+             oid = generate_objectid_with_timestamp(tstamp)
+-            self.assertEqual(
+-                oid.generation_time,
+-                datetime.datetime(*exp_datetime_args, tzinfo=utc))
++            if tstamp > 0x7FFFFFFF and sys.maxsize < 2**32:
++                # 32-bit platforms will overflow in datetime.fromtimestamp.
++                with self.assertRaises((OverflowError, ValueError)):
++                    oid.generation_time
++            else:
++                self.assertEqual(
++                    oid.generation_time,
++                    datetime.datetime(*exp_datetime_args, tzinfo=utc))
+ 
+     def test_random_regenerated_on_pid_change(self):
+         # Test that change of pid triggers new random number generation.

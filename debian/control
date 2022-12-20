@@ -1,0 +1,83 @@
+Source: pymongo
+Section: python
+Priority: optional
+Maintainer: Federico Ceratto <federico@debian.org>
+Build-Depends: debhelper-compat (= 13),
+ dh-python,
+ python3-all-dev,
+ python3-openssl (>= 19.0.0~),
+ python3-setuptools,
+ python3-sphinx,
+Standards-Version: 4.5.0
+Rules-Requires-Root: no
+Homepage: https://api.mongodb.org/python/
+Vcs-Git: https://salsa.debian.org/debian/pymongo.git
+Vcs-Browser: https://salsa.debian.org/debian/pymongo
+Testsuite: autopkgtest-pkg-python
+
+Package: python3-pymongo
+Architecture: any
+Depends: python3-bson (= ${binary:Version}), ${python3:Depends}, ${misc:Depends}
+Recommends: python3-gridfs (>= ${source:Version})
+ , python3-pymongo-ext [any-amd64 any-armel any-armhf any-i386 any-ia64 any-mipsel any-ppc64el]
+Provides: ${python3:Provides}
+Suggests: python-pymongo-doc
+Description: Python3 interface to the MongoDB document-oriented database
+ MongoDB is a high-performance, open source, schema-free
+ document-oriented data store. Pymongo provides an interface
+ to easily access it from Python3.
+ Consider installing the python3-pymongo-ext C extension to improve performance.
+
+Package: python3-pymongo-ext
+Architecture: any-amd64 any-armel any-armhf any-i386 any-ia64 any-mipsel any-ppc64el
+Depends: ${misc:Depends}
+ , ${python3:Depends}
+ , ${shlibs:Depends}
+ , python3-bson (= ${binary:Version})
+ , python3-pymongo (= ${binary:Version})
+Recommends: python3-gridfs (>= ${source:Version})
+Description: C-coded extension to the python3-pymongo package
+ Pymongo provides an interface to easily access MongoDB from Python 3.
+ This package contains an extension written in C for higher performance.
+
+Package: python-pymongo-doc
+Architecture: all
+Depends: ${sphinxdoc:Depends}, ${misc:Depends}, libjs-jquery, libjs-underscore
+Section: doc
+Description: Python interface to the MongoDB document-oriented database (documentation)
+ MongoDB is a high-performance, open source, schema-free
+ document-oriented data store. Pymongo provides an interface
+ to easily access it from Python.
+ .
+ This package contains the HTML documentation.
+
+Package: python3-gridfs
+Architecture: all
+Depends: ${python3:Depends}
+ , ${misc:Depends}
+ , python3-pymongo
+Provides: ${python3:Provides}
+Description: Python3 implementation of GridFS for MongoDB
+ GridFS is a storage specification for large objects in MongoDB.
+ The Python3 gridfs module is an implementation based
+ on the pymongo module. It provides a file-like interface.
+
+Package: python3-bson
+Architecture: any
+Depends: ${python3:Depends}, ${misc:Depends}, ${shlibs:Depends}
+Recommends: python3-bson-ext [any-amd64 any-armel any-armhf any-i386 any-ia64 any-mipsel any-ppc64el]
+Provides: ${python3:Provides}
+Description: Python3 implementation of BSON for MongoDB
+ BSON Python3 module contains all of the Binary JSON encoding and decoding
+ logic for MongoDB.
+
+Package: python3-bson-ext
+Architecture: any-amd64 any-armel any-armhf any-i386 any-ia64 any-mipsel any-ppc64el
+Depends: ${python3:Depends}
+ , ${misc:Depends}
+ , ${shlibs:Depends}
+ , python3-bson (= ${binary:Version})
+Description: C-coded extension to the python3-bson package
+ BSON Python 3 module contains all of the Binary JSON encoding and decoding
+ logic for MongoDB.
+ This package contains an extension written in C for higher performance.

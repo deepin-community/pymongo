@@ -1,0 +1,33 @@
+From: Shane Harvey <shnhrv@gmail.com>
+Date: Thu, 10 Sep 2020 13:39:34 -0700
+Subject: PYTHON-2262 Test Python 3.9 in Evergreen
+
+Bug-Debian: https://bugs.debian.org/972207
+Bug-Upstream: https://jira.mongodb.org/browse/PYTHON-2262
+Origin: upstream, https://github.com/mongodb/mongo-python-driver/commit/fcb6a8ecbc98fceca138d74fb09b516b172bb4e0
+---
+ setup.py                  | 1 +
+ test/test_custom_types.py | 2 +-
+ 2 files changed, 2 insertions(+), 1 deletion(-)
+
+--- a/setup.py
++++ b/setup.py
+@@ -420,6 +420,7 @@
+         "Programming Language :: Python :: 3.6",
+         "Programming Language :: Python :: 3.7",
+         "Programming Language :: Python :: 3.8",
++        "Programming Language :: Python :: 3.9",
+         "Programming Language :: Python :: Implementation :: CPython",
+         "Programming Language :: Python :: Implementation :: PyPy",
+         "Topic :: Database"],
+--- a/test/test_custom_types.py
++++ b/test/test_custom_types.py
+@@ -255,7 +255,7 @@
+ 
+ class TestBSONTypeEnDeCodecs(unittest.TestCase):
+     def test_instantiation(self):
+-        msg = "Can't instantiate abstract class .* with abstract methods .*"
++        msg = "Can't instantiate abstract class"
+         def run_test(base, attrs, fail):
+             codec = type('testcodec', (base,), attrs)
+             if fail:
