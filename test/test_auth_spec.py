@@ -13,75 +13,66 @@
 # limitations under the License.
 
 """Run the auth spec tests."""
+from __future__ import annotations
 
 import glob
 import json
 import os
 import sys
+import warnings
 
 sys.path[0:0] = [""]
 
-from pymongo import MongoClient
 from test import unittest
+from test.unified_format import generate_test_classes
 
+from pymongo import MongoClient
+from pymongo.auth_oidc import OIDCCallback
 
-_TEST_PATH = os.path.join(
-    os.path.dirname(os.path.realpath(__file__)), 'auth')
+_TEST_PATH = os.path.join(os.path.dirname(os.path.realpath(__file__)), "auth")
 
 
 class TestAuthSpec(unittest.TestCase):
     pass
 
 
-def create_test(test_case):
+class SampleHumanCallback(OIDCCallback):
+    def fetch(self, context):
+        pass
 
+
+def create_test(test_case):
     def run_test(self):
-        uri = test_case['uri']
-        valid = test_case['valid']
-        credential = test_case.get('credential')
+        uri = test_case["uri"]
+        valid = test_case["valid"]
+        credential = test_case.get("credential")
 
         if not valid:
-            self.assertRaises(Exception, MongoClient, uri, connect=False)
+            with warnings.catch_warnings():
+                warnings.simplefilter("default")
+                self.assertRaises(Exception, MongoClient, uri, connect=False)
         else:
             client = MongoClient(uri, connect=False)
-            credentials = client._MongoClient__options.credentials
+            credentials = client.options.pool_options._credentials
             if credential is None:
                 self.assertIsNone(credentials)
             else:
                 self.assertIsNotNone(credentials)
-                self.assertEqual(credentials.username, credential['username'])
-                self.assertEqual(credentials.password, credential['password'])
-                self.assertEqual(credentials.source, credential['source'])
-                if credential['mechanism'] is not None:
-                    self.assertEqual(
-                        credentials.mechanism, credential['mechanism'])
+                self.assertEqual(credentials.username, credential["username"])
+                self.assertEqual(credentials.password, credential["password"])
+                self.assertEqual(credentials.source, credential["source"])
+                if credential["mechanism"] is not None:
+                    self.assertEqual(credentials.mechanism, credential["mechanism"])
                 else:
-                    self.assertEqual(credentials.mechanism, 'DEFAULT')
-                expected = credential['mechanism_properties']
+                    self.assertEqual(credentials.mechanism, "DEFAULT")
+                expected = credential["mechanism_properties"]
                 if expected is not None:
                     actual = credentials.mechanism_properties
-                    for key, val in expected.items():
-                        if 'SERVICE_NAME' in expected:
-                            self.assertEqual(
-                                actual.service_name, expected['SERVICE_NAME'])
-                        elif 'CANONICALIZE_HOST_NAME' in expected:
-                            self.assertEqual(
-                                actual.canonicalize_host_name,
-                                expected['CANONICALIZE_HOST_NAME'])
-                        elif 'SERVICE_REALM' in expected:
-                            self.assertEqual(
-                                actual.service_realm,
-                                expected['SERVICE_REALM'])
-                        elif 'AWS_SESSION_TOKEN' in expected:
-                            self.assertEqual(
-                                actual.aws_session_token,
-                                expected['AWS_SESSION_TOKEN'])
-                        else:
-                            self.fail('Unhandled property: %s' % (key,))
+                    for key, value in expected.items():
+                        self.assertEqual(getattr(actual, key.lower()), value)
                 else:
-                    if credential['mechanism'] == 'MONGODB-AWS':
-                        self.assertIsNone(
-                            credentials.mechanism_properties.aws_session_token)
+                    if credential["mechanism"] == "MONGODB-AWS":
+                        self.assertIsNone(credentials.mechanism_properties.aws_session_token)
                     else:
                         self.assertIsNone(credentials.mechanism_properties)
 
@@ -89,23 +80,27 @@ def create_test(test_case):
 
 
 def create_tests():
-    for filename in glob.glob(os.path.join(_TEST_PATH, '*.json')):
+    for filename in glob.glob(os.path.join(_TEST_PATH, "legacy", "*.json")):
         test_suffix, _ = os.path.splitext(os.path.basename(filename))
         with open(filename) as auth_tests:
-            test_cases = json.load(auth_tests)['tests']
+            test_cases = json.load(auth_tests)["tests"]
             for test_case in test_cases:
-                if test_case.get('optional', False):
+                if test_case.get("optional", False):
                     continue
                 test_method = create_test(test_case)
-                name = str(test_case['description'].lower().replace(' ', '_'))
-                setattr(
-                    TestAuthSpec,
-                    'test_%s_%s' % (test_suffix, name),
-                    test_method)
+                name = str(test_case["description"].lower().replace(" ", "_"))
+                setattr(TestAuthSpec, f"test_{test_suffix}_{name}", test_method)
 
 
 create_tests()
 
+
+globals().update(
+    generate_test_classes(
+        os.path.join(_TEST_PATH, "unified"),
+        module=__name__,
+    )
+)
 
 if __name__ == "__main__":
     unittest.main()

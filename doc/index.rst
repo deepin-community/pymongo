@@ -26,13 +26,19 @@ everything you need to know to use **PyMongo**.
   Using PyMongo with TLS / SSL.
 
 :doc:`examples/encryption`
-  Using PyMongo with client side encryption.
+  Using PyMongo with In-Use Encryption.
+
+:doc:`examples/type_hints`
+  Using PyMongo with type hints.
+
+:doc:`examples/logging`
+  Using PyMongo's logging capabilities.
 
 :doc:`faq`
   Some questions that come up often.
 
-:doc:`migrate-to-pymongo3`
-  A PyMongo 2.x to 3.x migration guide.
+:doc:`migrate-to-pymongo4`
+  A PyMongo 3.x to 4.x migration guide.
 
 :doc:`python3`
   Frequently asked questions about python 3 support.
@@ -51,10 +57,13 @@ everything you need to know to use **PyMongo**.
 :doc:`developer/index`
   Developer guide for contributors to PyMongo.
 
+:doc:`common-issues`
+  Common issues encountered when using PyMongo.
+
 Getting Help
 ------------
 If you're having trouble or have questions about PyMongo, ask your question on
-our `MongoDB Community Forum <https://developer.mongodb.com/community/forums/tags/c/drivers-odms-connectors/7/python-driver>`_.
+our `MongoDB Community Forum <https://www.mongodb.com/community/forums/tag/python>`_.
 You may also want to consider a
 `commercial support subscription <https://support.mongodb.com/welcome>`_.
 Once you get an answer, it'd be great if you could work it back into this
@@ -89,14 +98,15 @@ For older versions of the documentation please see the
 About This Documentation
 ------------------------
 This documentation is generated using the `Sphinx
-<http://sphinx.pocoo.org/>`_ documentation generator. The source files
+<https://www.sphinx-doc.org/en/master/>`_ documentation generator. The source files
 for the documentation are located in the *doc/* directory of the
 **PyMongo** distribution. To generate the docs locally run the
 following command from the root directory of the **PyMongo** source:
 
 .. code-block:: bash
 
-  $ python setup.py doc
+  $ pip install tox
+  $ tox -m doc
 
 Indices and tables
 ------------------
@@ -119,5 +129,6 @@ Indices and tables
    contributors
    changelog
    python3
-   migrate-to-pymongo3
+   migrate-to-pymongo4
    developer/index
+   common-issues

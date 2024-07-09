@@ -1,10 +1,9 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Source: http://api.mongodb.org/python/
-Files-Excluded: doc/_build
 Upstream-Name: pymongo
 
 Files: *
-Copyright: © 2009-2014, Mike Dirolf <mike@10gen.com>, MongoDB Inc
+Copyright: © 2009-2024, Mike Dirolf <mike@10gen.com>, MongoDB Inc
 License: Apache-2.0
 
 Files: bson/time64.c
@@ -12,7 +11,9 @@ Copyright: © 2007-2010, Michael G Schwern <schwern@pobox.com>
 License: MIT
 
 Files: debian/*
-Copyright: © 2011-2012, Federico Ceratto <federico.ceratto@gmail.com>
+Copyright:
+ © 2022, Agathe Porte <debian@microjoe.org>
+ © 2011-2012, Federico Ceratto <federico.ceratto@gmail.com>
  © 2011-2012, Janos Guljas <janos@resenje.org>
  © 2012, ChangZhuo Chen <czchen@gmail.com>
 License: Apache-2.0

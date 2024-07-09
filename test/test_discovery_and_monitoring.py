@@ -13,122 +13,116 @@
 # limitations under the License.
 
 """Test the topology module."""
+from __future__ import annotations
 
 import os
+import socketserver
 import sys
 import threading
-import time
 
 sys.path[0:0] = [""]
 
-from bson import json_util, Timestamp
-from pymongo import (common,
-                     monitoring)
-from pymongo.errors import (AutoReconnect,
-                            ConfigurationError,
-                            NetworkTimeout,
-                            NotMasterError,
-                            OperationFailure)
-from pymongo.helpers import _check_command_response
-from pymongo.ismaster import IsMaster
-from pymongo.server_description import ServerDescription, SERVER_TYPE
+from test import IntegrationTest, unittest
+from test.pymongo_mocks import DummyMonitor
+from test.unified_format import generate_test_classes
+from test.utils import (
+    CMAPListener,
+    HeartbeatEventListener,
+    HeartbeatEventsListListener,
+    assertion_context,
+    client_context,
+    get_pool,
+    rs_or_single_client,
+    server_name_to_type,
+    single_client,
+    wait_until,
+)
+from unittest.mock import patch
+
+from bson import Timestamp, json_util
+from pymongo import MongoClient, common, monitoring
+from pymongo.errors import (
+    AutoReconnect,
+    ConfigurationError,
+    NetworkTimeout,
+    NotPrimaryError,
+    OperationFailure,
+)
+from pymongo.hello import Hello, HelloCompat
+from pymongo.helpers import _check_command_response, _check_write_command_response
+from pymongo.monitoring import ServerHeartbeatFailedEvent, ServerHeartbeatStartedEvent
+from pymongo.server_description import SERVER_TYPE, ServerDescription
 from pymongo.settings import TopologySettings
 from pymongo.topology import Topology, _ErrorContext
 from pymongo.topology_description import TOPOLOGY_TYPE
 from pymongo.uri_parser import parse_uri
-from test import unittest, IntegrationTest
-from test.utils import (assertion_context,
-                        client_context,
-                        Barrier,
-                        get_pool,
-                        server_name_to_type,
-                        rs_or_single_client,
-                        TestCreator,
-                        wait_until)
-from test.utils_spec_runner import SpecRunner, SpecRunnerThread
-
 
 # Location of JSON test specifications.
-_TEST_PATH = os.path.join(
-    os.path.dirname(os.path.realpath(__file__)), 'discovery_and_monitoring')
+SDAM_PATH = os.path.join(os.path.dirname(os.path.realpath(__file__)), "discovery_and_monitoring")
 
 
-class MockMonitor(object):
-    def __init__(self, server_description, topology, pool, topology_settings):
-        self._server_description = server_description
-
-    def cancel_check(self):
-        pass
-
-    def open(self):
-        pass
-
-    def close(self):
-        pass
-
-    def join(self):
-        pass
-
-    def request_check(self):
-        pass
-
-
-def create_mock_topology(uri, monitor_class=MockMonitor):
+def create_mock_topology(uri, monitor_class=DummyMonitor):
     parsed_uri = parse_uri(uri)
     replica_set_name = None
     direct_connection = None
-    if 'replicaset' in parsed_uri['options']:
-        replica_set_name = parsed_uri['options']['replicaset']
-    if 'directConnection' in parsed_uri['options']:
-        direct_connection = parsed_uri['options']['directConnection']
+    load_balanced = None
+    if "replicaset" in parsed_uri["options"]:
+        replica_set_name = parsed_uri["options"]["replicaset"]
+    if "directConnection" in parsed_uri["options"]:
+        direct_connection = parsed_uri["options"]["directConnection"]
+    if "loadBalanced" in parsed_uri["options"]:
+        load_balanced = parsed_uri["options"]["loadBalanced"]
 
     topology_settings = TopologySettings(
-        parsed_uri['nodelist'],
+        parsed_uri["nodelist"],
         replica_set_name=replica_set_name,
         monitor_class=monitor_class,
-        direct_connection=direct_connection)
+        direct_connection=direct_connection,
+        load_balanced=load_balanced,
+    )
 
     c = Topology(topology_settings)
     c.open()
     return c
 
 
-def got_ismaster(topology, server_address, ismaster_response):
-    server_description = ServerDescription(
-        server_address, IsMaster(ismaster_response), 0)
+def got_hello(topology, server_address, hello_response):
+    server_description = ServerDescription(server_address, Hello(hello_response), 0)
     topology.on_change(server_description)
 
 
 def got_app_error(topology, app_error):
-    server_address = common.partition_node(app_error['address'])
+    server_address = common.partition_node(app_error["address"])
     server = topology.get_server_by_address(server_address)
-    error_type = app_error['type']
-    generation = app_error.get('generation', server.pool.generation)
-    when = app_error['when']
-    max_wire_version = app_error['maxWireVersion']
+    error_type = app_error["type"]
+    generation = app_error.get("generation", server.pool.gen.get_overall())
+    when = app_error["when"]
+    max_wire_version = app_error["maxWireVersion"]
     # XXX: We could get better test coverage by mocking the errors on the
-    # Pool/SocketInfo.
+    # Pool/Connection.
     try:
-        if error_type == 'command':
-            _check_command_response(app_error['response'], max_wire_version)
-        elif error_type == 'network':
-            raise AutoReconnect('mock non-timeout network error')
-        elif error_type == 'timeout':
-            raise NetworkTimeout('mock network timeout error')
+        if error_type == "command":
+            _check_command_response(app_error["response"], max_wire_version)
+            _check_write_command_response(app_error["response"])
+        elif error_type == "network":
+            raise AutoReconnect("mock non-timeout network error")
+        elif error_type == "timeout":
+            raise NetworkTimeout("mock network timeout error")
         else:
-            raise AssertionError('unknown error type: %s' % (error_type,))
-        assert False
-    except (AutoReconnect, NotMasterError, OperationFailure) as e:
-        if when == 'beforeHandshakeCompletes':
+            raise AssertionError(f"unknown error type: {error_type}")
+        raise AssertionError
+    except (AutoReconnect, NotPrimaryError, OperationFailure) as e:
+        if when == "beforeHandshakeCompletes":
             completed_handshake = False
-        elif when == 'afterHandshakeCompletes':
+        elif when == "afterHandshakeCompletes":
             completed_handshake = True
         else:
-            assert False, 'Unknown when field %s' % (when,)
+            raise AssertionError(f"Unknown when field {when}")
 
         topology.handle_error(
-            server_address, _ErrorContext(e, max_wire_version, generation,
-                                          completed_handshake))
+            server_address,
+            _ErrorContext(e, max_wire_version, generation, completed_handshake, None),
+        )
 
 
 def get_type(topology, hostname):
@@ -149,14 +143,12 @@ def server_type_name(server_type):
 
 
 def check_outcome(self, topology, outcome):
-    expected_servers = outcome['servers']
+    expected_servers = outcome["servers"]
 
     # Check weak equality before proceeding.
-    self.assertEqual(
-        len(topology.description.server_descriptions()),
-        len(expected_servers))
+    self.assertEqual(len(topology.description.server_descriptions()), len(expected_servers))
 
-    if outcome.get('compatible') is False:
+    if outcome.get("compatible") is False:
         with self.assertRaises(ConfigurationError):
             topology.description.check_compatible()
     else:
@@ -170,75 +162,78 @@ def check_outcome(self, topology, outcome):
         self.assertTrue(topology.has_server(node))
         actual_server = topology.get_server_by_address(node)
         actual_server_description = actual_server.description
-        expected_server_type = server_name_to_type(expected_server['type'])
+        expected_server_type = server_name_to_type(expected_server["type"])
 
         self.assertEqual(
             server_type_name(expected_server_type),
-            server_type_name(actual_server_description.server_type))
+            server_type_name(actual_server_description.server_type),
+        )
+
+        self.assertEqual(expected_server.get("setName"), actual_server_description.replica_set_name)
+
+        self.assertEqual(expected_server.get("setVersion"), actual_server_description.set_version)
+
+        self.assertEqual(expected_server.get("electionId"), actual_server_description.election_id)
 
         self.assertEqual(
-            expected_server.get('setName'),
-            actual_server_description.replica_set_name)
+            expected_server.get("topologyVersion"), actual_server_description.topology_version
+        )
 
-        self.assertEqual(
-            expected_server.get('setVersion'),
-            actual_server_description.set_version)
-
-        self.assertEqual(
-            expected_server.get('electionId'),
-            actual_server_description.election_id)
-
-        self.assertEqual(
-            expected_server.get('topologyVersion'),
-            actual_server_description.topology_version)
-
-        expected_pool = expected_server.get('pool')
+        expected_pool = expected_server.get("pool")
         if expected_pool:
-            self.assertEqual(
-                expected_pool.get('generation'),
-                actual_server.pool.generation)
+            self.assertEqual(expected_pool.get("generation"), actual_server.pool.gen.get_overall())
 
-    self.assertEqual(outcome['setName'], topology.description.replica_set_name)
-    self.assertEqual(outcome.get('logicalSessionTimeoutMinutes'),
-                     topology.description.logical_session_timeout_minutes)
+    self.assertEqual(outcome["setName"], topology.description.replica_set_name)
+    self.assertEqual(
+        outcome.get("logicalSessionTimeoutMinutes"),
+        topology.description.logical_session_timeout_minutes,
+    )
 
-    expected_topology_type = getattr(TOPOLOGY_TYPE, outcome['topologyType'])
-    self.assertEqual(topology_type_name(expected_topology_type),
-                     topology_type_name(topology.description.topology_type))
+    expected_topology_type = getattr(TOPOLOGY_TYPE, outcome["topologyType"])
+    self.assertEqual(
+        topology_type_name(expected_topology_type),
+        topology_type_name(topology.description.topology_type),
+    )
+
+    self.assertEqual(outcome.get("maxSetVersion"), topology.description.max_set_version)
+    self.assertEqual(outcome.get("maxElectionId"), topology.description.max_election_id)
 
 
 def create_test(scenario_def):
     def run_scenario(self):
-        c = create_mock_topology(scenario_def['uri'])
+        c = create_mock_topology(scenario_def["uri"])
 
-        for i, phase in enumerate(scenario_def['phases']):
+        for i, phase in enumerate(scenario_def["phases"]):
             # Including the phase description makes failures easier to debug.
-            description = phase.get('description', str(i))
-            with assertion_context('phase: %s' % (description,)):
-                for response in phase.get('responses', []):
-                    got_ismaster(
-                        c, common.partition_node(response[0]), response[1])
+            description = phase.get("description", str(i))
+            with assertion_context(f"phase: {description}"):
+                for response in phase.get("responses", []):
+                    got_hello(c, common.partition_node(response[0]), response[1])
 
-                for app_error in phase.get('applicationErrors', []):
+                for app_error in phase.get("applicationErrors", []):
                     got_app_error(c, app_error)
 
-                check_outcome(self, c, phase['outcome'])
+                check_outcome(self, c, phase["outcome"])
 
     return run_scenario
 
 
 def create_tests():
-    for dirpath, _, filenames in os.walk(_TEST_PATH):
+    for dirpath, _, filenames in os.walk(SDAM_PATH):
         dirname = os.path.split(dirpath)[-1]
+        # SDAM unified tests are handled separately.
+        if dirname == "unified":
+            continue
 
         for filename in filenames:
+            if os.path.splitext(filename)[1] != ".json":
+                continue
             with open(os.path.join(dirpath, filename)) as scenario_stream:
                 scenario_def = json_util.loads(scenario_stream.read())
 
             # Construct test from scenario.
             new_test = create_test(scenario_def)
-            test_name = 'test_%s_%s' % (
-                dirname, os.path.splitext(filename)[0])
+            test_name = f"test_{dirname}_{os.path.splitext(filename)[0]}"
 
             new_test.__name__ = test_name
             setattr(TestAllScenarios, new_test.__name__, new_test)
@@ -249,17 +244,16 @@ create_tests()
 
 class TestClusterTimeComparison(unittest.TestCase):
     def test_cluster_time_comparison(self):
-        t = create_mock_topology('mongodb://host')
+        t = create_mock_topology("mongodb://host")
 
         def send_cluster_time(time, inc, should_update):
             old = t.max_cluster_time()
-            new = {'clusterTime': Timestamp(time, inc)}
-            got_ismaster(t,
-                         ('host', 27017),
-                         {'ok': 1,
-                          'minWireVersion': 0,
-                          'maxWireVersion': 6,
-                          '$clusterTime': new})
+            new = {"clusterTime": Timestamp(time, inc)}
+            got_hello(
+                t,
+                ("host", 27017),
+                {"ok": 1, "minWireVersion": 0, "maxWireVersion": 6, "$clusterTime": new},
+            )
 
             actual = t.max_cluster_time()
             if should_update:
@@ -275,31 +269,30 @@ class TestClusterTimeComparison(unittest.TestCase):
 
 
 class TestIgnoreStaleErrors(IntegrationTest):
-
     def test_ignore_stale_connection_errors(self):
         N_THREADS = 5
-        barrier = Barrier(N_THREADS, timeout=30)
+        barrier = threading.Barrier(N_THREADS, timeout=30)
         client = rs_or_single_client(minPoolSize=N_THREADS)
         self.addCleanup(client.close)
 
         # Wait for initial discovery.
-        client.admin.command('ping')
+        client.admin.command("ping")
         pool = get_pool(client)
-        starting_generation = pool.generation
-        wait_until(lambda: len(pool.sockets) == N_THREADS, 'created sockets')
+        starting_generation = pool.gen.get_overall()
+        wait_until(lambda: len(pool.conns) == N_THREADS, "created conns")
 
         def mock_command(*args, **kwargs):
             # Synchronize all threads to ensure they use the same generation.
             barrier.wait()
-            raise AutoReconnect('mock SocketInfo.command error')
+            raise AutoReconnect("mock Connection.command error")
 
-        for sock in pool.sockets:
+        for sock in pool.conns:
             sock.command = mock_command
 
         def insert_command(i):
             try:
-                client.test.command('insert', 'test', documents=[{'i': i}])
-            except AutoReconnect as exc:
+                client.test.command("insert", "test", documents=[{"i": i}])
+            except AutoReconnect:
                 pass
 
         threads = []
@@ -311,110 +304,145 @@ class TestIgnoreStaleErrors(IntegrationTest):
             t.join()
 
         # Expect a single pool reset for the network error
-        self.assertEqual(starting_generation+1, pool.generation)
+        self.assertEqual(starting_generation + 1, pool.gen.get_overall())
 
         # Server should be selectable.
-        client.admin.command('ping')
+        client.admin.command("ping")
 
 
-class TestIntegration(SpecRunner):
-    # Location of JSON test specifications.
-    TEST_PATH = os.path.join(
-        os.path.dirname(os.path.realpath(__file__)),
-        'discovery_and_monitoring_integration')
-
-    def _event_count(self, event):
-        if event == 'ServerMarkedUnknownEvent':
-            def marked_unknown(e):
-                return (isinstance(e, monitoring.ServerDescriptionChangedEvent)
-                        and not e.new_description.is_server_type_known)
-            return len(self.server_listener.matching(marked_unknown))
-        # Only support CMAP events for now.
-        self.assertTrue(event.startswith('Pool') or event.startswith('Conn'))
-        event_type = getattr(monitoring, event)
-        return self.pool_listener.event_count(event_type)
-
-    def assert_event_count(self, event, count):
-        """Run the assertEventCount test operation.
-
-        Assert the given event was published exactly `count` times.
-        """
-        self.assertEqual(self._event_count(event), count,
-                         'expected %s not %r' % (count, event))
-
-    def wait_for_event(self, event, count):
-        """Run the waitForEvent test operation.
-
-        Wait for a number of events to be published, or fail.
-        """
-        wait_until(lambda: self._event_count(event) >= count,
-                   'find %s %s event(s)' % (count, event))
-
-    def configure_fail_point(self, fail_point):
-        """Run the configureFailPoint test operation.
-        """
-        self.set_fail_point(fail_point)
-        self.addCleanup(self.set_fail_point, {
-            'configureFailPoint': fail_point['configureFailPoint'],
-            'mode': 'off'})
-
-    def run_admin_command(self, command, **kwargs):
-        """Run the runAdminCommand test operation.
-        """
-        self.client.admin.command(command, **kwargs)
-
-    def record_primary(self):
-        """Run the recordPrimary test operation.
-        """
-        self._previous_primary = self.scenario_client.primary
-
-    def wait_for_primary_change(self, timeout_ms):
-        """Run the waitForPrimaryChange test operation.
-        """
-        def primary_changed():
-            primary = self.scenario_client.primary
-            if primary is None:
-                return False
-            return primary != self._previous_primary
-        timeout = timeout_ms/1000.0
-        wait_until(primary_changed, 'change primary', timeout=timeout)
-
-    def wait(self, ms):
-        """Run the "wait" test operation.
-        """
-        time.sleep(ms/1000.0)
-
-    def start_thread(self, name):
-        """Run the 'startThread' thread operation."""
-        thread = SpecRunnerThread(name)
-        thread.start()
-        self.targets[name] = thread
-
-    def run_on_thread(self, sessions, collection, name, operation):
-        """Run the 'runOnThread' operation."""
-        thread = self.targets[name]
-        thread.schedule(lambda: self._run_op(
-            sessions, collection, operation, False))
-
-    def wait_for_thread(self, name):
-        """Run the 'waitForThread' operation."""
-        thread = self.targets[name]
-        thread.stop()
-        thread.join()
-        if thread.exc:
-            raise thread.exc
+class CMAPHeartbeatListener(HeartbeatEventListener, CMAPListener):
+    pass
 
 
-def create_spec_test(scenario_def, test, name):
-    @client_context.require_test_commands
-    def run_scenario(self):
-        self.run_scenario(scenario_def, test)
+class TestPoolManagement(IntegrationTest):
+    @client_context.require_failCommand_appName
+    def test_pool_unpause(self):
+        # This test implements the prose test "Connection Pool Management"
+        listener = CMAPHeartbeatListener()
+        client = single_client(
+            appName="SDAMPoolManagementTest", heartbeatFrequencyMS=500, event_listeners=[listener]
+        )
+        self.addCleanup(client.close)
+        # Assert that ConnectionPoolReadyEvent occurs after the first
+        # ServerHeartbeatSucceededEvent.
+        listener.wait_for_event(monitoring.PoolReadyEvent, 1)
+        pool_ready = listener.events_by_type(monitoring.PoolReadyEvent)[0]
+        hb_succeeded = listener.events_by_type(monitoring.ServerHeartbeatSucceededEvent)[0]
+        self.assertGreater(listener.events.index(pool_ready), listener.events.index(hb_succeeded))
 
-    return run_scenario
+        listener.reset()
+        fail_hello = {
+            "mode": {"times": 2},
+            "data": {
+                "failCommands": [HelloCompat.LEGACY_CMD, "hello"],
+                "errorCode": 1234,
+                "appName": "SDAMPoolManagementTest",
+            },
+        }
+        with self.fail_point(fail_hello):
+            listener.wait_for_event(monitoring.ServerHeartbeatFailedEvent, 1)
+            listener.wait_for_event(monitoring.PoolClearedEvent, 1)
+            listener.wait_for_event(monitoring.ServerHeartbeatSucceededEvent, 1)
+            listener.wait_for_event(monitoring.PoolReadyEvent, 1)
 
 
-test_creator = TestCreator(create_spec_test, TestIntegration, TestIntegration.TEST_PATH)
-test_creator.create_tests()
+class TestServerMonitoringMode(IntegrationTest):
+    @client_context.require_no_serverless
+    @client_context.require_no_load_balancer
+    def setUp(self):
+        super().setUp()
+
+    def test_rtt_connection_is_enabled_stream(self):
+        client = rs_or_single_client(serverMonitoringMode="stream")
+        self.addCleanup(client.close)
+        client.admin.command("ping")
+
+        def predicate():
+            for _, server in client._topology._servers.items():
+                monitor = server._monitor
+                if not monitor._stream:
+                    return False
+                if client_context.version >= (4, 4):
+                    if monitor._rtt_monitor._executor._thread is None:
+                        return False
+                else:
+                    if monitor._rtt_monitor._executor._thread is not None:
+                        return False
+            return True
+
+        wait_until(predicate, "find all RTT monitors")
+
+    def test_rtt_connection_is_disabled_poll(self):
+        client = rs_or_single_client(serverMonitoringMode="poll")
+        self.addCleanup(client.close)
+        self.assert_rtt_connection_is_disabled(client)
+
+    def test_rtt_connection_is_disabled_auto(self):
+        envs = [
+            {"AWS_EXECUTION_ENV": "AWS_Lambda_python3.9"},
+            {"FUNCTIONS_WORKER_RUNTIME": "python"},
+            {"K_SERVICE": "gcpservicename"},
+            {"FUNCTION_NAME": "gcpfunctionname"},
+            {"VERCEL": "1"},
+        ]
+        for env in envs:
+            with patch.dict("os.environ", env):
+                client = rs_or_single_client(serverMonitoringMode="auto")
+                self.addCleanup(client.close)
+                self.assert_rtt_connection_is_disabled(client)
+
+    def assert_rtt_connection_is_disabled(self, client):
+        client.admin.command("ping")
+        for _, server in client._topology._servers.items():
+            monitor = server._monitor
+            self.assertFalse(monitor._stream)
+            self.assertIsNone(monitor._rtt_monitor._executor._thread)
+
+
+class MockTCPHandler(socketserver.BaseRequestHandler):
+    def handle(self):
+        self.server.events.append("client connected")
+        if self.request.recv(1024).strip():
+            self.server.events.append("client hello received")
+        self.request.close()
+
+
+class TCPServer(socketserver.TCPServer):
+    allow_reuse_address = True
+
+    def handle_request_and_shutdown(self):
+        self.handle_request()
+        self.server_close()
+
+
+class TestHeartbeatStartOrdering(unittest.TestCase):
+    def test_heartbeat_start_ordering(self):
+        events = []
+        listener = HeartbeatEventsListListener(events)
+        server = TCPServer(("localhost", 9999), MockTCPHandler)
+        server.events = events
+        server_thread = threading.Thread(target=server.handle_request_and_shutdown)
+        server_thread.start()
+        _c = MongoClient(
+            "mongodb://localhost:9999", serverSelectionTimeoutMS=500, event_listeners=(listener,)
+        )
+        server_thread.join()
+        listener.wait_for_event(ServerHeartbeatStartedEvent, 1)
+        listener.wait_for_event(ServerHeartbeatFailedEvent, 1)
+
+        self.assertEqual(
+            events,
+            [
+                "serverHeartbeatStartedEvent",
+                "client connected",
+                "client hello received",
+                "serverHeartbeatFailedEvent",
+            ],
+        )
+
+
+# Generate unified tests.
+globals().update(generate_test_classes(os.path.join(SDAM_PATH, "unified"), module=__name__))
 
 
 if __name__ == "__main__":

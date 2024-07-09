@@ -13,14 +13,21 @@
 # limitations under the License.
 
 """Run the unit tests for WriteConcern."""
+from __future__ import annotations
 
 import collections
 import unittest
 
+from pymongo.errors import ConfigurationError
 from pymongo.write_concern import WriteConcern
 
 
 class TestWriteConcern(unittest.TestCase):
+    def test_invalid(self):
+        # Can't use fsync and j options together
+        self.assertRaises(ConfigurationError, WriteConcern, j=True, fsync=True)
+        # Can't use w=0 and j options together
+        self.assertRaises(ConfigurationError, WriteConcern, w=0, j=True)
 
     def test_equality(self):
         concern = WriteConcern(j=True, wtimeout=3000)
@@ -31,12 +38,10 @@ class TestWriteConcern(unittest.TestCase):
         concern = WriteConcern()
         self.assertNotEqual(concern, None)
         # Explicitly use the != operator.
-        self.assertTrue(concern != None)  # noqa
+        self.assertTrue(concern != None)  # noqa: E711
 
     def test_equality_compatible_type(self):
-
-        class _FakeWriteConcern(object):
-
+        class _FakeWriteConcern:
             def __init__(self, **document):
                 self.document = document
 
@@ -59,9 +64,9 @@ class TestWriteConcern(unittest.TestCase):
         self.assertNotEqual(WriteConcern(wtimeout=42), _FakeWriteConcern(wtimeout=2000))
 
     def test_equality_incompatible_type(self):
-        _fake_type = collections.namedtuple('NotAWriteConcern', ['document'])
-        self.assertNotEqual(WriteConcern(j=True), _fake_type({'j': True}))
+        _fake_type = collections.namedtuple("NotAWriteConcern", ["document"])  # type: ignore
+        self.assertNotEqual(WriteConcern(j=True), _fake_type({"j": True}))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

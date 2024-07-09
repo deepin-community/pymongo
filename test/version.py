@@ -13,13 +13,13 @@
 # limitations under the License.
 
 """Some tools for running tests based on MongoDB server version."""
+from __future__ import annotations
 
 
 class Version(tuple):
-
     def __new__(cls, *version):
         padded_version = cls._padded(version, 4)
-        return super(Version, cls).__new__(cls, tuple(padded_version))
+        return super().__new__(cls, tuple(padded_version))
 
     @classmethod
     def _padded(cls, iter, length, padding=0):
@@ -43,15 +43,14 @@ class Version(tuple):
             version_string = version_string[0:-1]
             mod = -1
         # Deal with '-rcX' substrings
-        if '-rc' in version_string:
-            version_string = version_string[0:version_string.find('-rc')]
+        if "-rc" in version_string:
+            version_string = version_string[0 : version_string.find("-rc")]
             mod = -1
         # Deal with git describe generated substrings
-        elif '-' in version_string:
-            version_string = version_string[0:version_string.find('-')]
+        elif "-" in version_string:
+            version_string = version_string[0 : version_string.find("-")]
             mod = -1
             bump_patch_level = True
-
 
         version = [int(part) for part in version_string.split(".")]
         version = cls._padded(version, 3)
@@ -77,9 +76,9 @@ class Version(tuple):
     @classmethod
     def from_client(cls, client):
         info = client.server_info()
-        if 'versionArray' in info:
-            return cls.from_version_array(info['versionArray'])
-        return cls.from_string(info['version'])
+        if "versionArray" in info:
+            return cls.from_version_array(info["versionArray"])
+        return cls.from_string(info["version"])
 
     def at_least(self, *other_version):
         return self >= Version(*other_version)

@@ -4,7 +4,7 @@ High Availability and PyMongo
 PyMongo makes it easy to write highly available applications whether
 you use a `single replica set <http://dochub.mongodb.org/core/rs>`_
 or a `large sharded cluster
-<http://www.mongodb.org/display/DOCS/Sharding+Introduction>`_.
+<https://www.mongodb.com/docs/manual/sharding/>`_.
 
 Connecting to a Replica Set
 ---------------------------
@@ -14,7 +14,7 @@ PyMongo makes working with `replica sets
 replica set and show how to handle both initialization and normal
 connections with PyMongo.
 
-.. mongodoc:: rs
+.. seealso:: The MongoDB documentation on `replication <http://dochub.mongodb.org/core/rs>`_.
 
 Starting a Replica Set
 ~~~~~~~~~~~~~~~~~~~~~~
@@ -52,11 +52,11 @@ At this point all of our nodes are up and running, but the set has yet
 to be initialized. Until the set is initialized no node will become
 the primary, and things are essentially "offline".
 
-To initialize the set we need to connect to a single node and run the
-initiate command::
+To initialize the set we need to connect directly to a single node and run the
+initiate command using the ``directConnection`` option::
 
   >>> from pymongo import MongoClient
-  >>> c = MongoClient('localhost', 27017)
+  >>> c = MongoClient('localhost', 27017, directConnection=True)
 
 .. note:: We could have connected to any of the other nodes instead,
    but only the node we initiate from is allowed to contain any
@@ -81,15 +81,19 @@ The initial connection as made above is a special case for an
 uninitialized replica set. Normally we'll want to connect
 differently. A connection to a replica set can be made using the
 :meth:`~pymongo.mongo_client.MongoClient` constructor, specifying
-one or more members of the set, along with the replica set name. Any of
-the following connects to the replica set we just created::
+one or more members of the set and optionally the replica set name.
+Any of the following connects to the replica set we just created::
 
+  >>> MongoClient('localhost')
+  MongoClient(host=['localhost:27017'], ...)
   >>> MongoClient('localhost', replicaset='foo')
   MongoClient(host=['localhost:27017'], replicaset='foo', ...)
   >>> MongoClient('localhost:27018', replicaset='foo')
   MongoClient(['localhost:27018'], replicaset='foo', ...)
   >>> MongoClient('localhost', 27019, replicaset='foo')
   MongoClient(['localhost:27019'], replicaset='foo', ...)
+  >>> MongoClient('mongodb://localhost:27017,localhost:27018/')
+  MongoClient(['localhost:27017', 'localhost:27018'], ...)
   >>> MongoClient('mongodb://localhost:27017,localhost:27018/?replicaSet=foo')
   MongoClient(['localhost:27017', 'localhost:27018'], replicaset='foo', ...)
 
@@ -111,7 +115,7 @@ set::
   >>> from time import sleep
   >>> c = MongoClient(replicaset='foo'); print(c.nodes); sleep(0.1); print(c.nodes)
   frozenset([])
-  frozenset([(u'localhost', 27019), (u'localhost', 27017), (u'localhost', 27018)])
+  frozenset([('localhost', 27019), ('localhost', 27017), ('localhost', 27018)])
 
 You need not wait for replica set discovery in your application, however.
 If you need to do any operation with a MongoClient, such as a
@@ -132,7 +136,7 @@ connect to the replica set and perform a couple of basic operations::
   >>> db.test.insert_one({"x": 1}).inserted_id
   ObjectId('...')
   >>> db.test.find_one()
-  {u'x': 1, u'_id': ObjectId('...')}
+  {'x': 1, '_id': ObjectId('...')}
 
 By checking the host and port, we can see that we're connected to
 *localhost:27017*, which is the current primary::
@@ -162,7 +166,7 @@ general). At that point the driver will connect to the new primary and
 the operation will succeed::
 
   >>> db.test.find_one()
-  {u'x': 1, u'_id': ObjectId('...')}
+  {'x': 1, '_id': ObjectId('...')}
   >>> db.client.address
   ('localhost', 27018)
 
@@ -257,7 +261,7 @@ attributes:
 **Tag sets**:
 
 Replica-set members can be `tagged
-<http://www.mongodb.org/display/DOCS/Data+Center+Awareness>`_ according to any
+<https://www.mongodb.com/docs/manual/data-center-awareness/>`_ according to any
 criteria you choose. By default, PyMongo ignores tags when
 choosing a member to read from, but your read preference can be configured with
 a ``tag_sets`` parameter. ``tag_sets`` must be a list of dictionaries, each
@@ -304,7 +308,7 @@ milliseconds of the closest member's ping time.
   replica set *through* a mongos. The equivalent is the localThreshold_ command
   line option.
 
-.. _localThreshold: http://docs.mongodb.org/manual/reference/mongos/#cmdoption--localThreshold
+.. _localThreshold: https://mongodb.com/docs/manual/reference/program/mongos/#std-option-mongos.--localThreshold
 
 .. _health-monitoring:
 
