@@ -11,8 +11,7 @@ Percent-Escaping Username and Password
 --------------------------------------
 
 Username and password must be percent-escaped with
-:meth:`urllib.parse.quote_plus` in Python 3, or :meth:`urllib.quote_plus` in
-Python 2, to be used in a MongoDB URI. For example, in Python 3::
+:py:func:`urllib.parse.quote_plus`, to be used in a MongoDB URI. For example::
 
   >>> from pymongo import MongoClient
   >>> import urllib.parse
@@ -98,9 +97,8 @@ the "MongoDB Challenge-Response" protocol::
 Default Authentication Mechanism
 --------------------------------
 
-If no mechanism is specified, PyMongo automatically uses MONGODB-CR when
-connected to a pre-3.0 version of MongoDB, SCRAM-SHA-1 when connected to
-MongoDB 3.0 through 3.6, and negotiates the mechanism to use (SCRAM-SHA-1
+If no mechanism is specified, PyMongo automatically SCRAM-SHA-1 when connected
+to MongoDB 3.6 and negotiates the mechanism to use (SCRAM-SHA-1
 or SCRAM-SHA-256) when connected to MongoDB 4.0+.
 
 Default Database and "authSource"
@@ -126,35 +124,26 @@ MONGODB-X509
 ------------
 .. versionadded:: 2.6
 
-The MONGODB-X509 mechanism authenticates a username derived from the
-distinguished subject name of the X.509 certificate presented by the driver
-during SSL negotiation. This authentication method requires the use of SSL
-connections with certificate validation and is available in MongoDB 2.6
-and newer::
+The MONGODB-X509 mechanism authenticates via the X.509 certificate presented
+by the driver during TLS/SSL negotiation. This authentication method requires
+the use of TLS/SSL connections with certificate validation::
 
-  >>> import ssl
   >>> from pymongo import MongoClient
   >>> client = MongoClient('example.com',
-  ...                      username="<X.509 derived username>"
   ...                      authMechanism="MONGODB-X509",
-  ...                      ssl=True,
-  ...                      ssl_certfile='/path/to/client.pem',
-  ...                      ssl_cert_reqs=ssl.CERT_REQUIRED,
-  ...                      ssl_ca_certs='/path/to/ca.pem')
+  ...                      tls=True,
+  ...                      tlsCertificateKeyFile='/path/to/client.pem',
+  ...                      tlsCAFile='/path/to/ca.pem')
 
 MONGODB-X509 authenticates against the $external virtual database, so you
 do not have to specify a database in the URI::
 
-  >>> uri = "mongodb://<X.509 derived username>@example.com/?authMechanism=MONGODB-X509"
+  >>> uri = "mongodb://example.com/?authMechanism=MONGODB-X509"
   >>> client = MongoClient(uri,
-  ...                      ssl=True,
-  ...                      ssl_certfile='/path/to/client.pem',
-  ...                      ssl_cert_reqs=ssl.CERT_REQUIRED,
-  ...                      ssl_ca_certs='/path/to/ca.pem')
+  ...                      tls=True,
+  ...                      tlsCertificateKeyFile='/path/to/client.pem',
+  ...                      tlsCAFile='/path/to/ca.pem')
   >>>
-
-.. versionchanged:: 3.4
-  When connected to MongoDB >= 3.4 the username is no longer required.
 
 .. _gssapi:
 
@@ -191,7 +180,7 @@ URI::
   >>> client = MongoClient(uri)
   >>>
 
-The default service name used by MongoDB and PyMongo is `mongodb`. You can
+The default service name used by MongoDB and PyMongo is ``mongodb``. You can
 specify a custom service name with the ``authMechanismProperties`` option::
 
   >>> from pymongo import MongoClient
@@ -242,17 +231,15 @@ These examples use the $external virtual database for LDAP support::
   >>>
 
 SASL PLAIN is a clear-text authentication mechanism. We **strongly** recommend
-that you connect to MongoDB using SSL with certificate validation when using
-the SASL PLAIN mechanism::
+that you connect to MongoDB using TLS/SSL with certificate validation when
+using the SASL PLAIN mechanism::
 
-  >>> import ssl
   >>> from pymongo import MongoClient
   >>> uri = "mongodb://user:password@example.com/?authMechanism=PLAIN"
   >>> client = MongoClient(uri,
-  ...                      ssl=True,
-  ...                      ssl_certfile='/path/to/client.pem',
-  ...                      ssl_cert_reqs=ssl.CERT_REQUIRED,
-  ...                      ssl_ca_certs='/path/to/ca.pem')
+  ...                      tls=True,
+  ...                      tlsCertificateKeyFile='/path/to/client.pem',
+  ...                      tlsCAFile='/path/to/ca.pem')
   >>>
 
 .. _MONGODB-AWS:
@@ -277,15 +264,23 @@ security (or session) token.
 
 Credentials can be configured through the MongoDB URI, environment variables,
 or the local EC2 or ECS endpoint. The order in which the client searches for
-credentials is:
+`credentials`_ is the same as the one used by the AWS ``boto3`` library
+when using ``pymongo_auth_aws>=1.1.0``.
 
-#. Credentials passed through the URI
-#. Environment variables
-#. ECS endpoint if and only if ``AWS_CONTAINER_CREDENTIALS_RELATIVE_URI`` is set.
-#. EC2 endpoint
+Because we are now using ``boto3`` to handle credentials, the order and
+locations of credentials are slightly different from before.  Particularly,
+if you have a shared AWS credentials or config file,
+then those credentials will be used by default if AWS auth environment
+variables are not set.  To override this behavior, set
+``AWS_SHARED_CREDENTIALS_FILE=""`` in your shell or add
+``os.environ["AWS_SHARED_CREDENTIALS_FILE"] = ""`` to your script or
+application.  Alternatively, you can create an AWS profile specifically for
+your MongoDB credentials and set ``AWS_PROFILE`` to that profile name.
 
 MONGODB-AWS authenticates against the "$external" virtual database, so none of
 the URIs in this section need to include the ``authSource`` URI option.
+
+.. _credentials: https://boto3.amazonaws.com/v1/documentation/api/latest/guide/credentials.html
 
 AWS IAM credentials
 ~~~~~~~~~~~~~~~~~~~
@@ -295,7 +290,7 @@ access key id and secret access key pair as the username and password,
 respectively, in the MongoDB URI. A sample URI would be::
 
   >>> from pymongo import MongoClient
-  >>> uri = "mongodb://<access_key_id>:<secret_access_key>@localhost/?authMechanism=MONGODB-AWS"
+  >>> uri = "mongodb+srv://<access_key_id>:<secret_access_key>@example.mongodb.net/?authMechanism=MONGODB-AWS"
   >>> client = MongoClient(uri)
 
 .. note:: The access_key_id and secret_access_key passed into the URI MUST
@@ -310,11 +305,12 @@ ID, a secret access key, and a security token passed into the URI.
 A sample URI would be::
 
   >>> from pymongo import MongoClient
-  >>> uri = "mongodb://<access_key_id>:<secret_access_key>@example.com/?authMechanism=MONGODB-AWS&authMechanismProperties=AWS_SESSION_TOKEN:<session_token>"
+  >>> uri = "mongodb+srv://<access_key_id>:<secret_access_key>@example.mongodb.net/?authMechanism=MONGODB-AWS&authMechanismProperties=AWS_SESSION_TOKEN:<session_token>"
   >>> client = MongoClient(uri)
 
 .. note:: The access_key_id, secret_access_key, and session_token passed into
           the URI MUST be `percent escaped`_.
+
 
 AWS Lambda (Environment Variables)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -329,12 +325,29 @@ for the access key ID, secret access key, and session token, respectively::
   $ export AWS_SESSION_TOKEN=<session_token>
   $ python
   >>> from pymongo import MongoClient
-  >>> uri = "mongodb://example.com/?authMechanism=MONGODB-AWS"
+  >>> uri = "mongodb+srv://example.mongodb.net/?authMechanism=MONGODB-AWS"
   >>> client = MongoClient(uri)
 
 .. note:: No username, password, or session token is passed into the URI.
           PyMongo will use credentials set via the environment variables.
           These environment variables MUST NOT be `percent escaped`_.
+
+
+.. _EKS Clusters:
+
+EKS Clusters
+~~~~~~~~~~~~
+
+Applications using the `Authenticating users for your cluster from an OpenID Connect identity provider <https://docs.aws.amazon.com/eks/latest/userguide/authenticate-oidc-identity-provider.html>`_ capability on EKS can now
+use the provided credentials, by giving the associated IAM User
+`sts:AssumeRoleWithWebIdentity <https://docs.aws.amazon.com/STS/latest/APIReference/API_AssumeRoleWithWebIdentity.html>`_
+permission.
+
+When the username and password are not provided, the MONGODB-AWS mechanism
+is set, and ``AWS_WEB_IDENTITY_TOKEN_FILE``, ``AWS_ROLE_ARN``, and
+optional ``AWS_ROLE_SESSION_NAME`` are available, the driver will use
+an ``AssumeRoleWithWebIdentity`` call to retrieve temporary credentials.
+The application must be using ``pymongo_auth_aws`` >= 1.1.0 for EKS support.
 
 ECS Container
 ~~~~~~~~~~~~~
@@ -344,7 +357,7 @@ credentials assigned to the machine. A sample URI on an ECS container
 would be::
 
   >>> from pymongo import MongoClient
-  >>> uri = "mongodb://localhost/?authMechanism=MONGODB-AWS"
+  >>> uri = "mongodb+srv://example.mongodb.com/?authMechanism=MONGODB-AWS"
   >>> client = MongoClient(uri)
 
 .. note:: No username, password, or session token is passed into the URI.
@@ -359,7 +372,7 @@ credentials assigned to the machine. A sample URI on an EC2 machine
 would be::
 
   >>> from pymongo import MongoClient
-  >>> uri = "mongodb://localhost/?authMechanism=MONGODB-AWS"
+  >>> uri = "mongodb+srv://example.mongodb.com/?authMechanism=MONGODB-AWS"
   >>> client = MongoClient(uri)
 
 .. note:: No username, password, or session token is passed into the URI.
@@ -371,3 +384,165 @@ would be::
 .. _Assume Role: https://docs.aws.amazon.com/STS/latest/APIReference/API_AssumeRole.html
 .. _EC2 instance: https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_use_switch-role-ec2.html
 .. _environment variables: https://docs.aws.amazon.com/lambda/latest/dg/configuration-envvars.html#configuration-envvars-runtime
+
+MONGODB-OIDC
+------------
+.. versionadded:: 4.7
+
+The `MONGODB-OIDC authentication mechanism`_ is available in MongoDB 7.0+ on Linux platforms.
+
+The MONGODB-OIDC mechanism authenticates using an OpenID Connect (OIDC) access token.
+The driver supports OIDC for workload identity, defined as an identity you assign to a software workload
+(such as an application, service, script, or container) to authenticate and access other services and resources.
+
+Credentials can be configured through the MongoDB URI or as arguments to
+:class:`~pymongo.mongo_client.MongoClient`.
+
+Built-in Support
+~~~~~~~~~~~~~~~~
+
+The driver has built-in support for Azure IMDS and GCP IMDS environments.  Other environments
+are supported with `Custom Callbacks`_.
+
+Azure IMDS
+^^^^^^^^^^
+
+For an application running on an Azure VM or otherwise using the `Azure Internal Metadata Service`_,
+you can use the built-in support for Azure. If using an Azure managed identity, the "<client_id>" is
+the client ID.  If using a service principal to represent an enterprise application, the "<client_id>" is
+the application ID of the service principal. The ``<audience>`` value is the ``audience``
+`configured on your MongoDB deployment`_.
+
+.. code-block:: python
+
+    import os
+
+    uri = os.environ["MONGODB_URI"]
+
+    props = {"ENVIRONMENT": "azure", "TOKEN_RESOURCE": "<audience>"}
+    c = MongoClient(
+        uri,
+        username="<client_id>",
+        authMechanism="MONGODB-OIDC",
+        authMechanismProperties=props,
+    )
+    c.test.test.insert_one({})
+    c.close()
+
+If the application is running on an Azure VM and only one managed identity is associated with the
+VM, ``username`` can be omitted.
+
+If providing the ``TOKEN_RESOURCE`` as part of a connection string, it can be given as follows.
+If the ``TOKEN_RESOURCE`` contains any of the following characters [``,``, ``+``, ``&``], then
+it MUST be url-encoded.
+
+.. code-block:: python
+
+    import os
+
+    uri = f'{os.environ["MONGODB_URI"]}?authMechanism=MONGODB-OIDC&authMechanismProperties=ENVIRONMENT:azure,TOKEN_RESOURCE:<audience>'
+    c = MongoClient(uri)
+    c.test.test.insert_one({})
+    c.close()
+
+GCP IMDS
+^^^^^^^^
+
+For an application running on an GCP VM or otherwise using the `GCP Internal Metadata Service`_,
+you can use the built-in support for GCP, where ``<audience>`` below is the ``audience``
+`configured on your MongoDB deployment`_.
+
+.. code-block:: python
+
+    import os
+
+    uri = os.environ["MONGODB_URI"]
+
+    props = {"ENVIRONMENT": "gcp", "TOKEN_RESOURCE": "<audience>"}
+    c = MongoClient(uri, authMechanism="MONGODB-OIDC", authMechanismProperties=props)
+    c.test.test.insert_one({})
+    c.close()
+
+If providing the ``TOKEN_RESOURCE`` as part of a connection string, it can be given as follows.
+If the ``TOKEN_RESOURCE`` contains any of the following characters [``,``, ``+``, ``&``], then
+it MUST be url-encoded.
+
+.. code-block:: python
+
+    import os
+
+    uri = f'{os.environ["MONGODB_URI"]}?authMechanism=MONGODB-OIDC&authMechanismProperties=ENVIRONMENT:gcp,TOKEN_RESOURCE:<audience>'
+    c = MongoClient(uri)
+    c.test.test.insert_one({})
+    c.close()
+
+Custom Callbacks
+~~~~~~~~~~~~~~~~
+
+For environments that are not directly supported by the driver, you can use :class:`~pymongo.auth_oidc.OIDCCallback`.
+Some examples are given below.
+
+Other Azure Environments
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+For applications running on Azure Functions, App Service Environment (ASE), or
+Azure Kubernetes Service (AKS), you can use the `azure-identity package`_
+to fetch the credentials.  This example assumes you have set environment variables for
+the ``audience`` `configured on your MongoDB deployment`_, and for the client id of the Azure
+managed identity.
+
+.. code-block:: python
+
+  import os
+  from azure.identity import DefaultAzureCredential
+  from pymongo import MongoClient
+  from pymongo.auth_oidc import OIDCCallback, OIDCCallbackContext, OIDCCallbackResult
+
+  audience = os.environ["AZURE_AUDIENCE"]
+  client_id = os.environ["AZURE_IDENTITY_CLIENT_ID"]
+  uri = os.environ["MONGODB_URI"]
+
+
+  class MyCallback(OIDCCallback):
+      def fetch(self, context: OIDCCallbackContext) -> OIDCCallbackResult:
+          credential = DefaultAzureCredential(managed_identity_client_id=client_id)
+          token = credential.get_token(f"{audience}/.default").token
+          return OIDCCallbackResult(access_token=token)
+
+
+  props = {"OIDC_CALLBACK": MyCallback()}
+  c = MongoClient(uri, authMechanism="MONGODB-OIDC", authMechanismProperties=props)
+  c.test.test.insert_one({})
+  c.close()
+
+GCP GKE
+^^^^^^^
+
+For a Google Kubernetes Engine cluster with a `configured service account`_, the token can be read from the standard
+service account token file location.
+
+.. code-block:: python
+
+    import os
+    from pymongo.auth_oidc import OIDCCallback, OIDCCallbackContext, OIDCCallbackResult
+
+
+    class MyCallback(OIDCCallback):
+        def fetch(self, context: OIDCCallbackContext) -> OIDCCallbackResult:
+            with open("/var/run/secrets/kubernetes.io/serviceaccount/token") as fid:
+                token = fid.read()
+            return OIDCCallbackResult(access_token=token)
+
+
+    uri = os.environ["MONGODB_URI"]
+    props = {"OIDC_CALLBACK": MyCallback()}
+    c = MongoClient(uri, authMechanism="MONGODB-OIDC", authMechanismProperties=props)
+    c.test.test.insert_one({})
+    c.close()
+
+.. _MONGODB-OIDC authentication mechanism: https://www.mongodb.com/docs/manual/core/security-oidc/
+.. _Azure Internal Metadata Service: https://learn.microsoft.com/en-us/azure/virtual-machines/instance-metadata-service
+.. _configured on your MongoDB deployment: https://www.mongodb.com/docs/manual/reference/parameters/#mongodb-parameter-param.oidcIdentityProviders
+.. _GCP Internal Metadata Service: https://cloud.google.com/compute/docs/metadata/querying-metadata
+.. _azure-identity package: https://pypi.org/project/azure-identity/
+.. _configured service account: https://cloud.google.com/kubernetes-engine/docs/how-to/service-accounts

@@ -1,1 +1,3 @@
-fcb6a8ecbc98fceca138d74fb09b516b172bb4e0.patch
+0001-Remove-test-that-fail.patch
+0002-Fix-test-that-fail-under-salsa.patch
+0003-Fix-test-that-fail-without-network.patch

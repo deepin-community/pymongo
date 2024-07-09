@@ -1,8 +1,37 @@
-pymongo (3.11.0-deepin1) unstable; urgency=medium
+pymongo (4.7.3-1) unstable; urgency=medium
 
-  * Rebuild
+  * QA upload
+  * Update d/watch
+  * Import python team repo
+  * Use any-arm instead of any-armel and any-armhf (Closes: #1034525)
+  * Move homepage (Closes: #1036815)
+  * New upstream releae:
+    + Fix "helpers.py enforces strict checking for sort() values"
+      (Closes: #748424)
+    + Move pure python package to arch:all (Closes: #752525)
+    + Fix CVE-2024-5629
 
- -- Deepin Packages Builder <packages@deepin.org>  Fri, 11 Nov 2022 18:03:12 +0800
+ -- Bastien Roucariès <rouca@debian.org>  Sat, 15 Jun 2024 16:25:28 +0000
+
+pymongo (3.12.3-1) UNRELEASED; urgency=medium
+
+  [ Agathe Porte ]
+  * New upstream version 3.12.3
+  * d/control: Fix build warnings
+  * d/copyright: Update authors
+  * d/upstream/metadata: add Bug-Database
+  * d/watch: mangle in personal devscripts instead
+  * d/changelog: update Maintainer to DPT (Closes: #1002583)
+  * d/control: Fix multiarch metadata
+  * d/watch: only watch for 3.* releases
+
+ -- Agathe Porte <debian@microjoe.org>  Fri, 14 Jan 2022 11:20:36 +0100
+
+pymongo (3.12.0-1) UNRELEASED; urgency=medium
+
+  * New upstream release
+
+ -- Federico Ceratto <federico@debian.org>  Tue, 24 Aug 2021 21:55:43 +0100
 
 pymongo (3.11.0-1) unstable; urgency=medium
 

@@ -13,20 +13,24 @@
 # limitations under the License.
 
 """Test the monitor module."""
+from __future__ import annotations
 
 import gc
+import subprocess
 import sys
 from functools import partial
 
 sys.path[0:0] = [""]
 
-from pymongo.periodic_executor import _EXECUTORS
+from test import IntegrationTest, unittest
+from test.utils import (
+    ServerAndTopologyEventListener,
+    connected,
+    single_client,
+    wait_until,
+)
 
-from test import unittest, IntegrationTest
-from test.utils import (connected,
-                        ServerAndTopologyEventListener,
-                        single_client,
-                        wait_until)
+from pymongo.periodic_executor import _EXECUTORS
 
 
 def unregistered(ref):
@@ -58,16 +62,13 @@ class TestMonitor(IntegrationTest):
         self.assertEqual(len(executors), 4)
 
         # Each executor stores a weakref to itself in _EXECUTORS.
-        executor_refs = [
-            (r, r()._name) for r in _EXECUTORS.copy() if r() in executors]
+        executor_refs = [(r, r()._name) for r in _EXECUTORS.copy() if r() in executors]
 
         del executors
         del client
 
         for ref, name in executor_refs:
-            wait_until(partial(unregistered, ref),
-                       'unregister executor: %s' % (name,),
-                       timeout=5)
+            wait_until(partial(unregistered, ref), f"unregister executor: {name}", timeout=5)
 
     def test_cleanup_executors_on_client_close(self):
         client = create_client()
@@ -77,9 +78,18 @@ class TestMonitor(IntegrationTest):
         client.close()
 
         for executor in executors:
-            wait_until(lambda: executor._stopped,
-                       'closed executor: %s' % (executor._name,),
-                       timeout=5)
+            wait_until(lambda: executor._stopped, f"closed executor: {executor._name}", timeout=5)
+
+    def test_no_thread_start_runtime_err_on_shutdown(self):
+        """Test we silence noisy runtime errors fired when the MongoClient spawns a new thread
+        on process shutdown."""
+        command = [sys.executable, "-c", "from pymongo import MongoClient; c = MongoClient()"]
+        completed_process: subprocess.CompletedProcess = subprocess.run(
+            command, capture_output=True
+        )
+
+        self.assertFalse(completed_process.stderr)
+        self.assertFalse(completed_process.stdout)
 
 
 if __name__ == "__main__":

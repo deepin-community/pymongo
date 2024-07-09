@@ -5,9 +5,6 @@
    :synopsis: Database level operations
 
    .. autodata:: pymongo.auth.MECHANISMS
-   .. autodata:: pymongo.OFF
-   .. autodata:: pymongo.SLOW_ONLY
-   .. autodata:: pymongo.ALL
 
    .. autoclass:: pymongo.database.Database
       :members:
@@ -23,11 +20,9 @@
          .. note::  Use dictionary style access if `collection_name` is an
             attribute of the :class:`Database` class eg: db[`collection_name`].
 
+      .. automethod:: __getitem__
+      .. automethod:: __getattr__
       .. autoattribute:: codec_options
       .. autoattribute:: read_preference
       .. autoattribute:: write_concern
       .. autoattribute:: read_concern
-
-
-   .. autoclass:: pymongo.database.SystemJS
-      :members:

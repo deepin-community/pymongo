@@ -1,0 +1,376 @@
+From: =?utf-8?q?Bastien_Roucari=C3=A8s?= <rouca@debian.org>
+Date: Sat, 15 Jun 2024 21:27:51 +0000
+Subject: Fix test that fail without network
+
+forwarded: not-needed
+---
+ test/test_client.py               |  61 ----------------
+ test/test_srv_polling.py          | 145 --------------------------------------
+ test/uri_options/srv-options.json | 116 ------------------------------
+ 3 files changed, 322 deletions(-)
+ delete mode 100644 test/uri_options/srv-options.json
+
+diff --git a/test/test_client.py b/test/test_client.py
+index 169e0a1..c4b2d41 100644
+--- a/test/test_client.py
++++ b/test/test_client.py
+@@ -403,44 +403,6 @@ class ClientUnitTest(unittest.TestCase):
+         self.assertEqual(clopts.replica_set_name, "newname")
+         self.assertEqual(clopts.read_preference, ReadPreference.SECONDARY_PREFERRED)
+ 
+-    def test_connection_timeout_ms_propagates_to_DNS_resolver(self):
+-        # Patch the resolver.
+-        from pymongo.srv_resolver import _resolve
+-
+-        patched_resolver = FunctionCallRecorder(_resolve)
+-        pymongo.srv_resolver._resolve = patched_resolver
+-
+-        def reset_resolver():
+-            pymongo.srv_resolver._resolve = _resolve
+-
+-        self.addCleanup(reset_resolver)
+-
+-        # Setup.
+-        base_uri = "mongodb+srv://test5.test.build.10gen.cc"
+-        connectTimeoutMS = 5000
+-        expected_kw_value = 5.0
+-        uri_with_timeout = base_uri + "/?connectTimeoutMS=6000"
+-        expected_uri_value = 6.0
+-
+-        def test_scenario(args, kwargs, expected_value):
+-            patched_resolver.reset()
+-            MongoClient(*args, **kwargs)
+-            for _, kw in patched_resolver.call_list():
+-                self.assertAlmostEqual(kw["lifetime"], expected_value)
+-
+-        # No timeout specified.
+-        test_scenario((base_uri,), {}, CONNECT_TIMEOUT)
+-
+-        # Timeout only specified in connection string.
+-        test_scenario((uri_with_timeout,), {}, expected_uri_value)
+-
+-        # Timeout only specified in keyword arguments.
+-        kwarg = {"connectTimeoutMS": connectTimeoutMS}
+-        test_scenario((base_uri,), kwarg, expected_kw_value)
+-
+-        # Timeout specified in both kwargs and connection string.
+-        test_scenario((uri_with_timeout,), kwarg, expected_kw_value)
+-
+     def test_uri_security_options(self):
+         # Ensure that we don't silently override security-related options.
+         with self.assertRaises(InvalidURI):
+@@ -500,29 +462,6 @@ class ClientUnitTest(unittest.TestCase):
+             with self.assertRaisesRegex(ConfigurationError, expected):
+                 MongoClient(**{typo: "standard"})  # type: ignore[arg-type]
+ 
+-    @patch("pymongo.srv_resolver._SrvResolver.get_hosts")
+-    def test_detected_environment_logging(self, mock_get_hosts):
+-        normal_hosts = [
+-            "normal.host.com",
+-            "host.cosmos.azure.com",
+-            "host.docdb.amazonaws.com",
+-            "host.docdb-elastic.amazonaws.com",
+-        ]
+-        srv_hosts = ["mongodb+srv://<test>:<test>@" + s for s in normal_hosts]
+-        multi_host = (
+-            "host.cosmos.azure.com,host.docdb.amazonaws.com,host.docdb-elastic.amazonaws.com"
+-        )
+-        with self.assertLogs("pymongo", level="INFO") as cm:
+-            for host in normal_hosts:
+-                MongoClient(host)
+-            for host in srv_hosts:
+-                mock_get_hosts.return_value = [(host, 1)]
+-                MongoClient(host)
+-            MongoClient(multi_host)
+-            logs = [record.message for record in cm.records if record.name == "pymongo.client"]
+-            self.assertEqual(len(logs), 7)
+-
+-
+ class TestClient(IntegrationTest):
+     def test_multiple_uris(self):
+         with self.assertRaises(ConfigurationError):
+diff --git a/test/test_srv_polling.py b/test/test_srv_polling.py
+index 29283f0..db51a83 100644
+--- a/test/test_srv_polling.py
++++ b/test/test_srv_polling.py
+@@ -175,47 +175,6 @@ class TestSrvPolling(unittest.TestCase):
+             ):
+                 assertion_method(expected_response, client)
+ 
+-    def test_addition(self):
+-        response = self.BASE_SRV_RESPONSE[:]
+-        response.append(("localhost.test.build.10gen.cc", 27019))
+-        self.run_scenario(response, True)
+-
+-    def test_removal(self):
+-        response = self.BASE_SRV_RESPONSE[:]
+-        response.remove(("localhost.test.build.10gen.cc", 27018))
+-        self.run_scenario(response, True)
+-
+-    def test_replace_one(self):
+-        response = self.BASE_SRV_RESPONSE[:]
+-        response.remove(("localhost.test.build.10gen.cc", 27018))
+-        response.append(("localhost.test.build.10gen.cc", 27019))
+-        self.run_scenario(response, True)
+-
+-    def test_replace_both_with_one(self):
+-        response = [("localhost.test.build.10gen.cc", 27019)]
+-        self.run_scenario(response, True)
+-
+-    def test_replace_both_with_two(self):
+-        response = [
+-            ("localhost.test.build.10gen.cc", 27019),
+-            ("localhost.test.build.10gen.cc", 27020),
+-        ]
+-        self.run_scenario(response, True)
+-
+-    def test_dns_failures(self):
+-        from dns import exception
+-
+-        for exc in (exception.FormError, exception.TooBig, exception.Timeout):
+-
+-            def response_callback(*args):
+-                raise exc("DNS Failure!")
+-
+-            self.run_scenario(response_callback, False)
+-
+-    def test_dns_record_lookup_empty(self):
+-        response: list = []
+-        self.run_scenario(response, False)
+-
+     def _test_recover_from_initial(self, initial_callback):
+         # Construct a valid final response callback distinct from base.
+         response_final = self.BASE_SRV_RESPONSE[:]
+@@ -241,110 +200,6 @@ class TestSrvPolling(unittest.TestCase):
+             # Nodelist should reflect new valid DNS resolver response.
+             self.assert_nodelist_change(response_final, client)
+ 
+-    def test_recover_from_initially_empty_seedlist(self):
+-        def empty_seedlist():
+-            return []
+-
+-        self._test_recover_from_initial(empty_seedlist)
+-
+-    def test_recover_from_initially_erroring_seedlist(self):
+-        def erroring_seedlist():
+-            raise ConfigurationError
+-
+-        self._test_recover_from_initial(erroring_seedlist)
+-
+-    def test_10_all_dns_selected(self):
+-        response = [
+-            ("localhost.test.build.10gen.cc", 27017),
+-            ("localhost.test.build.10gen.cc", 27019),
+-            ("localhost.test.build.10gen.cc", 27020),
+-        ]
+-
+-        def nodelist_callback():
+-            return response
+-
+-        with SrvPollingKnobs(ttl_time=WAIT_TIME, min_srv_rescan_interval=WAIT_TIME):
+-            client = MongoClient(self.CONNECTION_STRING, srvMaxHosts=0)
+-            self.addCleanup(client.close)
+-            with SrvPollingKnobs(nodelist_callback=nodelist_callback):
+-                self.assert_nodelist_change(response, client)
+-
+-    def test_11_all_dns_selected(self):
+-        response = [
+-            ("localhost.test.build.10gen.cc", 27019),
+-            ("localhost.test.build.10gen.cc", 27020),
+-        ]
+-
+-        def nodelist_callback():
+-            return response
+-
+-        with SrvPollingKnobs(ttl_time=WAIT_TIME, min_srv_rescan_interval=WAIT_TIME):
+-            client = MongoClient(self.CONNECTION_STRING, srvMaxHosts=2)
+-            self.addCleanup(client.close)
+-            with SrvPollingKnobs(nodelist_callback=nodelist_callback):
+-                self.assert_nodelist_change(response, client)
+-
+-    def test_12_new_dns_randomly_selected(self):
+-        response = [
+-            ("localhost.test.build.10gen.cc", 27020),
+-            ("localhost.test.build.10gen.cc", 27019),
+-            ("localhost.test.build.10gen.cc", 27017),
+-        ]
+-
+-        def nodelist_callback():
+-            return response
+-
+-        with SrvPollingKnobs(ttl_time=WAIT_TIME, min_srv_rescan_interval=WAIT_TIME):
+-            client = MongoClient(self.CONNECTION_STRING, srvMaxHosts=2)
+-            self.addCleanup(client.close)
+-            with SrvPollingKnobs(nodelist_callback=nodelist_callback):
+-                sleep(2 * common.MIN_SRV_RESCAN_INTERVAL)
+-                final_topology = set(client.topology_description.server_descriptions())
+-                self.assertIn(("localhost.test.build.10gen.cc", 27017), final_topology)
+-                self.assertEqual(len(final_topology), 2)
+-
+-    def test_does_not_flipflop(self):
+-        with SrvPollingKnobs(ttl_time=WAIT_TIME, min_srv_rescan_interval=WAIT_TIME):
+-            client = MongoClient(self.CONNECTION_STRING, srvMaxHosts=1)
+-            self.addCleanup(client.close)
+-            old = set(client.topology_description.server_descriptions())
+-            sleep(4 * WAIT_TIME)
+-            new = set(client.topology_description.server_descriptions())
+-            self.assertSetEqual(old, new)
+-
+-    def test_srv_service_name(self):
+-        # Construct a valid final response callback distinct from base.
+-        response = [
+-            ("localhost.test.build.10gen.cc.", 27019),
+-            ("localhost.test.build.10gen.cc.", 27020),
+-        ]
+-
+-        def nodelist_callback():
+-            return response
+-
+-        with SrvPollingKnobs(ttl_time=WAIT_TIME, min_srv_rescan_interval=WAIT_TIME):
+-            client = MongoClient(
+-                "mongodb+srv://test22.test.build.10gen.cc/?srvServiceName=customname"
+-            )
+-            with SrvPollingKnobs(nodelist_callback=nodelist_callback):
+-                self.assert_nodelist_change(response, client)
+-
+-    def test_srv_waits_to_poll(self):
+-        modified = [("localhost.test.build.10gen.cc", 27019)]
+-
+-        def resolver_response():
+-            return modified
+-
+-        with SrvPollingKnobs(
+-            ttl_time=WAIT_TIME,
+-            min_srv_rescan_interval=WAIT_TIME,
+-            nodelist_callback=resolver_response,
+-        ):
+-            client = MongoClient(self.CONNECTION_STRING)
+-            self.assertRaises(
+-                AssertionError, self.assert_nodelist_change, modified, client, timeout=WAIT_TIME / 2
+-            )
+-
+     def test_import_dns_resolver(self):
+         # Regression test for PYTHON-4407
+         import dns.resolver
+diff --git a/test/uri_options/srv-options.json b/test/uri_options/srv-options.json
+deleted file mode 100644
+index ffc356f..0000000
+--- a/test/uri_options/srv-options.json
++++ /dev/null
+@@ -1,116 +0,0 @@
+-{
+-  "tests": [
+-    {
+-      "description": "SRV URI with custom srvServiceName",
+-      "uri": "mongodb+srv://test22.test.build.10gen.cc/?srvServiceName=customname",
+-      "valid": true,
+-      "warning": false,
+-      "hosts": null,
+-      "auth": null,
+-      "options": {
+-        "srvServiceName": "customname"
+-      }
+-    },
+-    {
+-      "description": "Non-SRV URI with custom srvServiceName",
+-      "uri": "mongodb://example.com/?srvServiceName=customname",
+-      "valid": false,
+-      "warning": false,
+-      "hosts": null,
+-      "auth": null,
+-      "options": {}
+-    },
+-    {
+-      "description": "SRV URI with srvMaxHosts",
+-      "uri": "mongodb+srv://test1.test.build.10gen.cc/?srvMaxHosts=2",
+-      "valid": true,
+-      "warning": false,
+-      "hosts": null,
+-      "auth": null,
+-      "options": {
+-        "srvMaxHosts": 2
+-      }
+-    },
+-    {
+-      "description": "SRV URI with negative integer for srvMaxHosts",
+-      "uri": "mongodb+srv://test1.test.build.10gen.cc/?srvMaxHosts=-1",
+-      "valid": true,
+-      "warning": true,
+-      "hosts": null,
+-      "auth": null,
+-      "options": {}
+-    },
+-    {
+-      "description": "SRV URI with invalid type for srvMaxHosts",
+-      "uri": "mongodb+srv://test1.test.build.10gen.cc/?srvMaxHosts=foo",
+-      "valid": true,
+-      "warning": true,
+-      "hosts": null,
+-      "auth": null,
+-      "options": {}
+-    },
+-    {
+-      "description": "Non-SRV URI with srvMaxHosts",
+-      "uri": "mongodb://example.com/?srvMaxHosts=2",
+-      "valid": false,
+-      "warning": false,
+-      "hosts": null,
+-      "auth": null,
+-      "options": {}
+-    },
+-    {
+-      "description": "SRV URI with positive srvMaxHosts and replicaSet",
+-      "uri": "mongodb+srv://test1.test.build.10gen.cc/?srvMaxHosts=2&replicaSet=foo",
+-      "valid": false,
+-      "warning": false,
+-      "hosts": null,
+-      "auth": null,
+-      "options": {}
+-    },
+-    {
+-      "description": "SRV URI with positive srvMaxHosts and loadBalanced=true",
+-      "uri": "mongodb+srv://test1.test.build.10gen.cc/?srvMaxHosts=2&loadBalanced=true",
+-      "valid": false,
+-      "warning": false,
+-      "hosts": null,
+-      "auth": null,
+-      "options": {}
+-    },
+-    {
+-      "description": "SRV URI with positive srvMaxHosts and loadBalanced=false",
+-      "uri": "mongodb+srv://test1.test.build.10gen.cc/?srvMaxHosts=2&loadBalanced=false",
+-      "valid": true,
+-      "warning": false,
+-      "hosts": null,
+-      "auth": null,
+-      "options": {
+-        "loadBalanced": false,
+-        "srvMaxHosts": 2
+-      }
+-    },
+-    {
+-      "description": "SRV URI with srvMaxHosts=0 and replicaSet",
+-      "uri": "mongodb+srv://test1.test.build.10gen.cc/?srvMaxHosts=0&replicaSet=foo",
+-      "valid": true,
+-      "warning": false,
+-      "hosts": null,
+-      "auth": null,
+-      "options": {
+-        "replicaSet": "foo",
+-        "srvMaxHosts": 0
+-      }
+-    },
+-    {
+-      "description": "SRV URI with srvMaxHosts=0 and loadBalanced=true",
+-      "uri": "mongodb+srv://test3.test.build.10gen.cc/?srvMaxHosts=0&loadBalanced=true",
+-      "valid": true,
+-      "warning": false,
+-      "hosts": null,
+-      "auth": null,
+-      "options": {
+-        "loadBalanced": true,
+-        "srvMaxHosts": 0
+-      }
+-    }
+-  ]
+-}

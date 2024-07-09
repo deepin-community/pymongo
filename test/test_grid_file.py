@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 #
 # Copyright 2009-present MongoDB, Inc.
 #
@@ -14,36 +13,42 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for the grid_file module.
-"""
+"""Tests for the grid_file module."""
+from __future__ import annotations
 
 import datetime
+import io
 import sys
 import zipfile
+from io import BytesIO
+
+from pymongo.database import Database
+
 sys.path[0:0] = [""]
 
+from test import IntegrationTest, qcheck, unittest
+from test.utils import EventListener, rs_or_single_client
+
 from bson.objectid import ObjectId
-from bson.py3compat import StringIO
 from gridfs import GridFS
-from gridfs.grid_file import (DEFAULT_CHUNK_SIZE,
-                              _SEEK_CUR,
-                              _SEEK_END,
-                              GridIn,
-                              GridOut,
-                              GridOutCursor)
 from gridfs.errors import NoFile
+from gridfs.grid_file import (
+    _SEEK_CUR,
+    _SEEK_END,
+    DEFAULT_CHUNK_SIZE,
+    GridIn,
+    GridOut,
+    GridOutCursor,
+)
 from pymongo import MongoClient
 from pymongo.errors import ConfigurationError, ServerSelectionTimeoutError
 from pymongo.message import _CursorAddress
-from test import (IntegrationTest,
-                  unittest,
-                  qcheck)
-from test.utils import rs_or_single_client, EventListener
 
 
 class TestGridFileNoConnect(unittest.TestCase):
-    """Test GridFile features on a client that does not connect.
-    """
+    """Test GridFile features on a client that does not connect."""
+
+    db: Database
 
     @classmethod
     def setUpClass(cls):
@@ -52,9 +57,17 @@ class TestGridFileNoConnect(unittest.TestCase):
     def test_grid_in_custom_opts(self):
         self.assertRaises(TypeError, GridIn, "foo")
 
-        a = GridIn(self.db.fs, _id=5, filename="my_file",
-                   contentType="text/html", chunkSize=1000, aliases=["foo"],
-                   metadata={"foo": 1, "bar": 2}, bar=3, baz="hello")
+        a = GridIn(
+            self.db.fs,
+            _id=5,
+            filename="my_file",
+            contentType="text/html",
+            chunkSize=1000,
+            aliases=["foo"],
+            metadata={"foo": 1, "bar": 2},
+            bar=3,
+            baz="hello",
+        )
 
         self.assertEqual(5, a._id)
         self.assertEqual("my_file", a.filename)
@@ -67,18 +80,15 @@ class TestGridFileNoConnect(unittest.TestCase):
         self.assertEqual("hello", a.baz)
         self.assertRaises(AttributeError, getattr, a, "mike")
 
-        b = GridIn(self.db.fs,
-                   content_type="text/html", chunk_size=1000, baz=100)
+        b = GridIn(self.db.fs, content_type="text/html", chunk_size=1000, baz=100)
         self.assertEqual("text/html", b.content_type)
         self.assertEqual(1000, b.chunk_size)
         self.assertEqual(100, b.baz)
 
 
 class TestGridFile(IntegrationTest):
-
     def setUp(self):
-        self.db.drop_collection('fs.files')
-        self.db.drop_collection('fs.chunks')
+        self.cleanup_colls(self.db.fs.files, self.db.fs.chunks)
 
     def test_basic(self):
         f = GridIn(self.db.fs, filename="test")
@@ -109,7 +119,7 @@ class TestGridFile(IntegrationTest):
         f = GridIn(self.db.fs)
         f.write(b"hello world\n")
         f.close()
-        self.assertEqual("6f5902ac237024bdd0c176cb93063dc4", f.md5)
+        self.assertEqual(None, f.md5)
 
     def test_alternate_collection(self):
         self.db.alt.files.delete_many({})
@@ -124,9 +134,6 @@ class TestGridFile(IntegrationTest):
 
         g = GridOut(self.db.alt, f._id)
         self.assertEqual(b"hello world", g.read())
-
-        # test that md5 still works...
-        self.assertEqual("5eb63bbbe01eeed093cb22bb8f5acdc3", g.md5)
 
     def test_grid_in_default_opts(self):
         self.assertRaises(TypeError, GridIn, "foo")
@@ -191,7 +198,7 @@ class TestGridFile(IntegrationTest):
 
         self.assertEqual({"foo": 1}, a.metadata)
 
-        self.assertEqual("d41d8cd98f00b204e9800998ecf8427e", a.md5)
+        self.assertEqual(None, a.md5)
         self.assertRaises(AttributeError, setattr, a, "md5", 5)
 
         # Make sure custom attributes that were set both before and after
@@ -222,32 +229,50 @@ class TestGridFile(IntegrationTest):
         self.assertTrue(isinstance(b.upload_date, datetime.datetime))
         self.assertEqual(None, b.aliases)
         self.assertEqual(None, b.metadata)
-        self.assertEqual("d41d8cd98f00b204e9800998ecf8427e", b.md5)
+        self.assertEqual(None, b.md5)
 
-        for attr in ["_id", "name", "content_type", "length", "chunk_size",
-                     "upload_date", "aliases", "metadata", "md5"]:
+        for attr in [
+            "_id",
+            "name",
+            "content_type",
+            "length",
+            "chunk_size",
+            "upload_date",
+            "aliases",
+            "metadata",
+            "md5",
+        ]:
             self.assertRaises(AttributeError, setattr, b, attr, 5)
 
     def test_grid_out_cursor_options(self):
-        self.assertRaises(TypeError, GridOutCursor.__init__, self.db.fs, {},
-                          projection={"filename": 1})
+        self.assertRaises(
+            TypeError, GridOutCursor.__init__, self.db.fs, {}, projection={"filename": 1}
+        )
 
         cursor = GridOutCursor(self.db.fs, {})
         cursor_clone = cursor.clone()
-        
+
         cursor_dict = cursor.__dict__.copy()
-        cursor_dict.pop('_Cursor__session')
+        cursor_dict.pop("_Cursor__session")
         cursor_clone_dict = cursor_clone.__dict__.copy()
-        cursor_clone_dict.pop('_Cursor__session')
-        self.assertEqual(cursor_dict, cursor_clone_dict)
+        cursor_clone_dict.pop("_Cursor__session")
+        self.assertDictEqual(cursor_dict, cursor_clone_dict)
 
         self.assertRaises(NotImplementedError, cursor.add_option, 0)
         self.assertRaises(NotImplementedError, cursor.remove_option, 0)
 
     def test_grid_out_custom_opts(self):
-        one = GridIn(self.db.fs, _id=5, filename="my_file",
-                     contentType="text/html", chunkSize=1000, aliases=["foo"],
-                     metadata={"foo": 1, "bar": 2}, bar=3, baz="hello")
+        one = GridIn(
+            self.db.fs,
+            _id=5,
+            filename="my_file",
+            contentType="text/html",
+            chunkSize=1000,
+            aliases=["foo"],
+            metadata={"foo": 1, "bar": 2},
+            bar=3,
+            baz="hello",
+        )
         one.write(b"hello world")
         one.close()
 
@@ -263,10 +288,19 @@ class TestGridFile(IntegrationTest):
         self.assertEqual(["foo"], two.aliases)
         self.assertEqual({"foo": 1, "bar": 2}, two.metadata)
         self.assertEqual(3, two.bar)
-        self.assertEqual("5eb63bbbe01eeed093cb22bb8f5acdc3", two.md5)
+        self.assertEqual(None, two.md5)
 
-        for attr in ["_id", "name", "content_type", "length", "chunk_size",
-                     "upload_date", "aliases", "metadata", "md5"]:
+        for attr in [
+            "_id",
+            "name",
+            "content_type",
+            "length",
+            "chunk_size",
+            "upload_date",
+            "aliases",
+            "metadata",
+            "md5",
+        ]:
             self.assertRaises(AttributeError, setattr, two, attr, 5)
 
     def test_grid_out_file_document(self):
@@ -277,8 +311,7 @@ class TestGridFile(IntegrationTest):
         two = GridOut(self.db.fs, file_document=self.db.fs.files.find_one())
         self.assertEqual(b"foo bar", two.read())
 
-        three = GridOut(self.db.fs, 5,
-                        file_document=self.db.fs.files.find_one())
+        three = GridOut(self.db.fs, 5, file_document=self.db.fs.files.find_one())
         self.assertEqual(b"foo bar", three.read())
 
         four = GridOut(self.db.fs, file_document={})
@@ -301,12 +334,11 @@ class TestGridFile(IntegrationTest):
 
         five = GridIn(self.db.fs, chunk_size=2)
         five.write(b"hello")
-        buffer = StringIO(b" world")
+        buffer = BytesIO(b" world")
         five.write(buffer)
         five.write(b" and mongodb")
         five.close()
-        self.assertEqual(b"hello world and mongodb",
-                         GridOut(self.db.fs, five._id).read())
+        self.assertEqual(b"hello world and mongodb", GridOut(self.db.fs, five._id).read())
 
     def test_write_lines(self):
         a = GridIn(self.db.fs)
@@ -321,8 +353,22 @@ class TestGridFile(IntegrationTest):
         self.assertRaises(ValueError, f.write, "test")
         f.close()
 
+    def test_closed(self):
+        f = GridIn(self.db.fs, chunkSize=5)
+        f.write(b"Hello world.\nHow are you?")
+        f.close()
+
+        g = GridOut(self.db.fs, f._id)
+        self.assertFalse(g.closed)
+        g.read(1)
+        self.assertFalse(g.closed)
+        g.read(100)
+        self.assertFalse(g.closed)
+        g.close()
+        self.assertTrue(g.closed)
+
     def test_multi_chunk_file(self):
-        random_string = b'a' * (DEFAULT_CHUNK_SIZE + 1000)
+        random_string = b"a" * (DEFAULT_CHUNK_SIZE + 1000)
 
         f = GridIn(self.db.fs)
         f.write(random_string)
@@ -356,8 +402,7 @@ class TestGridFile(IntegrationTest):
             self.assertEqual(data, g.read(10) + g.read(10))
             return True
 
-        qcheck.check_unittest(self, helper,
-                              qcheck.gen_string(qcheck.gen_range(0, 20)))
+        qcheck.check_unittest(self, helper, qcheck.gen_string(qcheck.gen_range(0, 20)))
 
     def test_seek(self):
         f = GridIn(self.db.fs, chunkSize=3)
@@ -415,10 +460,12 @@ class TestGridFile(IntegrationTest):
 
     def test_readline(self):
         f = GridIn(self.db.fs, chunkSize=5)
-        f.write((b"""Hello world,
+        f.write(
+            b"""Hello world,
 How are you?
 Hope all is well.
-Bye"""))
+Bye"""
+        )
         f.close()
 
         # Try read(), then readline().
@@ -445,6 +492,60 @@ Bye"""))
         self.assertEqual(b"e", g.readline(1))
         self.assertEqual(b"llo world,\n", g.readline())
 
+    def test_readlines(self):
+        f = GridIn(self.db.fs, chunkSize=5)
+        f.write(
+            b"""Hello world,
+How are you?
+Hope all is well.
+Bye"""
+        )
+        f.close()
+
+        # Try read(), then readlines().
+        g = GridOut(self.db.fs, f._id)
+        self.assertEqual(b"He", g.read(2))
+        self.assertEqual([b"llo world,\n", b"How are you?\n"], g.readlines(11))
+        self.assertEqual([b"Hope all is well.\n", b"Bye"], g.readlines())
+        self.assertEqual([], g.readlines())
+
+        # Try readline(), then readlines().
+        g = GridOut(self.db.fs, f._id)
+        self.assertEqual(b"Hello world,\n", g.readline())
+        self.assertEqual([b"How are you?\n", b"Hope all is well.\n"], g.readlines(13))
+        self.assertEqual(b"Bye", g.readline())
+        self.assertEqual([], g.readlines())
+
+        # Only readlines().
+        g = GridOut(self.db.fs, f._id)
+        self.assertEqual(
+            [b"Hello world,\n", b"How are you?\n", b"Hope all is well.\n", b"Bye"], g.readlines()
+        )
+
+        g = GridOut(self.db.fs, f._id)
+        self.assertEqual(
+            [b"Hello world,\n", b"How are you?\n", b"Hope all is well.\n", b"Bye"], g.readlines(0)
+        )
+
+        g = GridOut(self.db.fs, f._id)
+        self.assertEqual([b"Hello world,\n"], g.readlines(1))
+        self.assertEqual([b"How are you?\n"], g.readlines(12))
+        self.assertEqual([b"Hope all is well.\n", b"Bye"], g.readlines(18))
+
+        # Try readlines() first, then read().
+        g = GridOut(self.db.fs, f._id)
+        self.assertEqual([b"Hello world,\n"], g.readlines(1))
+        self.assertEqual(b"H", g.read(1))
+        self.assertEqual([b"ow are you?\n", b"Hope all is well.\n"], g.readlines(29))
+        self.assertEqual([b"Bye"], g.readlines(1))
+
+        # Try readlines() first, then readline().
+        g = GridOut(self.db.fs, f._id)
+        self.assertEqual([b"Hello world,\n"], g.readlines(1))
+        self.assertEqual(b"How are you?\n", g.readline())
+        self.assertEqual([b"Hope all is well.\n"], g.readlines(17))
+        self.assertEqual(b"Bye", g.readline())
+
     def test_iterator(self):
         f = GridIn(self.db.fs)
         f.close()
@@ -452,30 +553,35 @@ Bye"""))
         self.assertEqual([], list(g))
 
         f = GridIn(self.db.fs)
-        f.write(b"hello world")
+        f.write(b"hello world\nhere are\nsome lines.")
         f.close()
         g = GridOut(self.db.fs, f._id)
-        self.assertEqual([b"hello world"], list(g))
-        self.assertEqual(b"hello", g.read(5))
-        self.assertEqual([b"hello world"], list(g))
-        self.assertEqual(b" worl", g.read(5))
+        self.assertEqual([b"hello world\n", b"here are\n", b"some lines."], list(g))
+        self.assertEqual(b"", g.read(5))
+        self.assertEqual([], list(g))
+
+        g = GridOut(self.db.fs, f._id)
+        self.assertEqual(b"hello world\n", next(iter(g)))
+        self.assertEqual(b"here", g.read(4))
+        self.assertEqual(b" are\n", next(iter(g)))
+        self.assertEqual(b"some lines", g.read(10))
+        self.assertEqual(b".", next(iter(g)))
+        self.assertRaises(StopIteration, iter(g).__next__)
 
         f = GridIn(self.db.fs, chunk_size=2)
         f.write(b"hello world")
         f.close()
         g = GridOut(self.db.fs, f._id)
-        self.assertEqual([b"he", b"ll", b"o ",
-                          b"wo", b"rl", b"d"], list(g))
+        self.assertEqual([b"hello world"], list(g))
 
     def test_read_unaligned_buffer_size(self):
-        in_data = (b"This is a text that doesn't "
-                   b"quite fit in a single 16-byte chunk.")
+        in_data = b"This is a text that doesn't quite fit in a single 16-byte chunk."
         f = GridIn(self.db.fs, chunkSize=16)
         f.write(in_data)
         f.close()
 
         g = GridOut(self.db.fs, f._id)
-        out_data = b''
+        out_data = b""
         while 1:
             s = g.read(13)
             if not s:
@@ -485,7 +591,7 @@ Bye"""))
         self.assertEqual(in_data, out_data)
 
     def test_readchunk(self):
-        in_data = b'a' * 10
+        in_data = b"a" * 10
         f = GridIn(self.db.fs, chunkSize=3)
         f.write(in_data)
         f.close()
@@ -504,21 +610,21 @@ Bye"""))
 
     def test_write_unicode(self):
         f = GridIn(self.db.fs)
-        self.assertRaises(TypeError, f.write, u"foo")
+        self.assertRaises(TypeError, f.write, "foo")
 
         f = GridIn(self.db.fs, encoding="utf-8")
-        f.write(u"foo")
+        f.write("foo")
         f.close()
 
         g = GridOut(self.db.fs, f._id)
         self.assertEqual(b"foo", g.read())
 
         f = GridIn(self.db.fs, encoding="iso-8859-1")
-        f.write(u"aé")
+        f.write("aé")
         f.close()
 
         g = GridOut(self.db.fs, f._id)
-        self.assertEqual(u"aé".encode("iso-8859-1"), g.read())
+        self.assertEqual("aé".encode("iso-8859-1"), g.read())
 
     def test_set_after_close(self):
         f = GridIn(self.db.fs, _id="foo", bar="baz")
@@ -564,14 +670,29 @@ Bye"""))
         with GridOut(self.db.fs, infile._id) as outfile:
             self.assertEqual(contents, outfile.read())
 
-    def test_prechunked_string(self):
+    def test_exception_file_non_existence(self):
+        contents = b"Imagine this is some important data..."
 
+        with self.assertRaises(ConnectionError):
+            with GridIn(self.db.fs, filename="important") as infile:
+                infile.write(contents)
+                raise ConnectionError("Test exception")
+
+        # Expectation: File chunks are written, entry in files doesn't appear.
+        self.assertEqual(
+            self.db.fs.chunks.count_documents({"files_id": infile._id}), infile._chunk_number
+        )
+
+        self.assertIsNone(self.db.fs.files.find_one({"_id": infile._id}))
+        self.assertTrue(infile.closed)
+
+    def test_prechunked_string(self):
         def write_me(s, chunk_size):
-            buf = StringIO(s)
+            buf = BytesIO(s)
             infile = GridIn(self.db.fs)
             while True:
                 to_write = buf.read(chunk_size)
-                if to_write == b'':
+                if to_write == b"":
                     break
                 infile.write(to_write)
             infile.close()
@@ -581,7 +702,7 @@ Bye"""))
             data = outfile.read()
             self.assertEqual(s, data)
 
-        s = b'x' * DEFAULT_CHUNK_SIZE * 4
+        s = b"x" * DEFAULT_CHUNK_SIZE * 4
         # Test with default chunk size
         write_me(s, DEFAULT_CHUNK_SIZE)
         # Multiple
@@ -593,7 +714,7 @@ Bye"""))
         fs = self.db.fs
         outfile = GridOut(fs, file_id=-1)
         self.assertRaises(NoFile, outfile.read)
-        self.assertRaises(NoFile, getattr, outfile, 'filename')
+        self.assertRaises(NoFile, getattr, outfile, "filename")
 
         infile = GridIn(fs, filename=1)
         infile.close()
@@ -606,11 +727,10 @@ Bye"""))
         outfile.readchunk()
 
     def test_grid_in_lazy_connect(self):
-        client = MongoClient('badhost', connect=False,
-                             serverSelectionTimeoutMS=10)
+        client = MongoClient("badhost", connect=False, serverSelectionTimeoutMS=10)
         fs = client.db.fs
         infile = GridIn(fs, file_id=-1, chunk_size=1)
-        self.assertRaises(ServerSelectionTimeoutError, infile.write, b'data')
+        self.assertRaises(ServerSelectionTimeoutError, infile.write, b"data")
         self.assertRaises(ServerSelectionTimeoutError, infile.close)
 
     def test_unacknowledged(self):
@@ -622,7 +742,7 @@ Bye"""))
         # By default the find command returns 101 documents in the first batch.
         # Use 102 batches to cause a single getMore.
         chunk_size = 1024
-        data = b'd' * (102 * chunk_size)
+        data = b"d" * (102 * chunk_size)
         listener = EventListener()
         client = rs_or_single_client(event_listeners=[listener])
         db = client.pymongo_test
@@ -635,9 +755,11 @@ Bye"""))
             # Kill the cursor to simulate the cursor timing out on the server
             # when an application spends a long time between two calls to
             # readchunk().
+            assert client.address is not None
             client._close_cursor_now(
                 outfile._GridOut__chunk_iter._cursor.cursor_id,
-                _CursorAddress(client.address, db.fs.chunks.full_name))
+                _CursorAddress(client.address, db.fs.chunks.full_name),
+            )
 
             # Read the rest of the file without error.
             self.assertEqual(len(outfile.read()), len(data) - chunk_size)
@@ -646,7 +768,7 @@ Bye"""))
         self.assertIn("getMore", listener.started_command_names())
 
     def test_zip(self):
-        zf = StringIO()
+        zf = BytesIO()
         z = zipfile.ZipFile(zf, "w")
         z.writestr("test.txt", b"hello world")
         z.close()
@@ -662,6 +784,21 @@ Bye"""))
         z = zipfile.ZipFile(g)
         self.assertSequenceEqual(z.namelist(), ["test.txt"])
         self.assertEqual(z.read("test.txt"), b"hello world")
+
+    def test_grid_out_unsupported_operations(self):
+        f = GridIn(self.db.fs, chunkSize=3)
+        f.write(b"hello world")
+        f.close()
+
+        g = GridOut(self.db.fs, f._id)
+
+        self.assertRaises(io.UnsupportedOperation, g.writelines, [b"some", b"lines"])
+        self.assertRaises(io.UnsupportedOperation, g.write, b"some text")
+        self.assertRaises(io.UnsupportedOperation, g.fileno)
+        self.assertRaises(io.UnsupportedOperation, g.truncate)
+
+        self.assertFalse(g.writable())
+        self.assertFalse(g.isatty())
 
 
 if __name__ == "__main__":

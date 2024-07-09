@@ -4,8 +4,9 @@ Bulk Write Operations
 .. testsetup::
 
   from pymongo import MongoClient
+
   client = MongoClient()
-  client.drop_database('bulk_example')
+  client.drop_database("bulk_example")
 
 This tutorial explains how to take advantage of PyMongo's bulk
 write operation features. Executing write operations in batches
@@ -27,7 +28,7 @@ bulk insert operations.
 
   >>> import pymongo
   >>> db = pymongo.MongoClient().bulk_example
-  >>> db.test.insert_many([{'i': i} for i in range(10000)]).inserted_ids
+  >>> db.test.insert_many([{"i": i} for i in range(10000)]).inserted_ids
   [...]
   >>> db.test.count_documents({})
   10000
@@ -56,32 +57,30 @@ of operations performed.
 
   >>> from pprint import pprint
   >>> from pymongo import InsertOne, DeleteMany, ReplaceOne, UpdateOne
-  >>> result = db.test.bulk_write([
-  ...     DeleteMany({}),  # Remove all documents from the previous example.
-  ...     InsertOne({'_id': 1}),
-  ...     InsertOne({'_id': 2}),
-  ...     InsertOne({'_id': 3}),
-  ...     UpdateOne({'_id': 1}, {'$set': {'foo': 'bar'}}),
-  ...     UpdateOne({'_id': 4}, {'$inc': {'j': 1}}, upsert=True),
-  ...     ReplaceOne({'j': 1}, {'j': 2})])
+  >>> result = db.test.bulk_write(
+  ...     [
+  ...         DeleteMany({}),  # Remove all documents from the previous example.
+  ...         InsertOne({"_id": 1}),
+  ...         InsertOne({"_id": 2}),
+  ...         InsertOne({"_id": 3}),
+  ...         UpdateOne({"_id": 1}, {"$set": {"foo": "bar"}}),
+  ...         UpdateOne({"_id": 4}, {"$inc": {"j": 1}}, upsert=True),
+  ...         ReplaceOne({"j": 1}, {"j": 2}),
+  ...     ]
+  ... )
   >>> pprint(result.bulk_api_result)
   {'nInserted': 3,
    'nMatched': 2,
    'nModified': 2,
    'nRemoved': 10000,
    'nUpserted': 1,
-   'upserted': [{u'_id': 4, u'index': 5}],
+   'upserted': [{'_id': 4, 'index': 5}],
    'writeConcernErrors': [],
    'writeErrors': []}
 
-.. warning:: ``nModified`` is only reported by MongoDB 2.6 and later. When
-  connected to an earlier server version, or in certain mixed version sharding
-  configurations, PyMongo omits this field from the results of a bulk
-  write operation.
-
 The first write failure that occurs (e.g. duplicate key error) aborts the
 remaining operations, and PyMongo raises
-:class:`~pymongo.errors.BulkWriteError`. The :attr:`details` attibute of
+:class:`~pymongo.errors.BulkWriteError`. The :attr:`details` attribute of
 the exception instance provides the execution results up until the failure
 occurred and details about the failure - including the operation that caused
 the failure.
@@ -92,9 +91,10 @@ the failure.
   >>> from pymongo import InsertOne, DeleteOne, ReplaceOne
   >>> from pymongo.errors import BulkWriteError
   >>> requests = [
-  ...     ReplaceOne({'j': 2}, {'i': 5}),
-  ...     InsertOne({'_id': 4}),  # Violates the unique key constraint on _id.
-  ...     DeleteOne({'i': 5})]
+  ...     ReplaceOne({"j": 2}, {"i": 5}),
+  ...     InsertOne({"_id": 4}),  # Violates the unique key constraint on _id.
+  ...     DeleteOne({"i": 5}),
+  ... ]
   >>> try:
   ...     db.test.bulk_write(requests)
   ... except BulkWriteError as bwe:
@@ -107,10 +107,10 @@ the failure.
    'nUpserted': 0,
    'upserted': [],
    'writeConcernErrors': [],
-   'writeErrors': [{u'code': 11000,
-                    u'errmsg': u'...E11000...duplicate key error...',
-                    u'index': 1,...
-                    u'op': {'_id': 4}}]}
+   'writeErrors': [{'code': 11000,
+                    'errmsg': '...E11000...duplicate key error...',
+                    'index': 1,...
+                    'op': {'_id': 4}}]}
 
 .. _unordered_bulk:
 
@@ -129,10 +129,11 @@ and fourth operations succeed.
   :options: +NORMALIZE_WHITESPACE
 
   >>> requests = [
-  ...     InsertOne({'_id': 1}),
-  ...     DeleteOne({'_id': 2}),
-  ...     InsertOne({'_id': 3}),
-  ...     ReplaceOne({'_id': 4}, {'i': 1})]
+  ...     InsertOne({"_id": 1}),
+  ...     DeleteOne({"_id": 2}),
+  ...     InsertOne({"_id": 3}),
+  ...     ReplaceOne({"_id": 4}, {"i": 1}),
+  ... ]
   >>> try:
   ...     db.test.bulk_write(requests, ordered=False)
   ... except BulkWriteError as bwe:
@@ -145,14 +146,14 @@ and fourth operations succeed.
    'nUpserted': 0,
    'upserted': [],
    'writeConcernErrors': [],
-   'writeErrors': [{u'code': 11000,
-                    u'errmsg': u'...E11000...duplicate key error...',
-                    u'index': 0,...
-                    u'op': {'_id': 1}},
-                   {u'code': 11000,
-                    u'errmsg': u'...E11000...duplicate key error...',
-                    u'index': 2,...
-                    u'op': {'_id': 3}}]}
+   'writeErrors': [{'code': 11000,
+                    'errmsg': '...E11000...duplicate key error...',
+                    'index': 0,...
+                    'op': {'_id': 1}},
+                   {'code': 11000,
+                    'errmsg': '...',
+                    'index': 2,...
+                    'op': {'_id': 3}}]}
 
 Write Concern
 .............
@@ -177,7 +178,7 @@ after all operations are attempted, regardless of execution order.
    'nRemoved': 0,
    'nUpserted': 0,
    'upserted': [],
-   'writeConcernErrors': [{u'code': 64...
-                           u'errInfo': {u'wtimeout': True},
-                           u'errmsg': u'waiting for replication timed out'}],
+   'writeConcernErrors': [{'code': 64...
+                           'errInfo': {'wtimeout': True},
+                           'errmsg': 'waiting for replication timed out'}],
    'writeErrors': []}

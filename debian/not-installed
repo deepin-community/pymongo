@@ -1,0 +1,8 @@
+usr/lib/*/dist-packages/bson/*.c
+usr/lib/*/dist-packages/bson/*.h
+usr/lib/*/dist-packages/pymongo/*.c
+usr/lib/*/dist-packages/pymongo/*.h
+usr/lib/*/dist-packages/.pytest_cache/*
+usr/lib/*/dist-packages/xunit-results/*
+usr/lib/*/dist-packages/.pytest_cache/.gitignore
+usr/lib/*/dist-packages/pymongo*.dist-info/*

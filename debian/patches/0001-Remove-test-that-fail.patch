@@ -1,0 +1,44 @@
+From: =?utf-8?q?Bastien_Roucari=C3=A8s?= <rouca@debian.org>
+Date: Sat, 15 Jun 2024 16:41:08 +0000
+Subject: Remove test that fail
+
+Fail due to use of internal variable not available
+
+forwared: not-needed
+---
+ test/test_client.py | 22 ----------------------
+ 1 file changed, 22 deletions(-)
+
+diff --git a/test/test_client.py b/test/test_client.py
+index 4377d41..40a1831 100644
+--- a/test/test_client.py
++++ b/test/test_client.py
+@@ -573,28 +573,6 @@ class ClientUnitTest(unittest.TestCase):
+             logs = [record.message for record in cm.records if record.name == "pymongo.client"]
+             self.assertEqual(len(logs), 7)
+ 
+-    @patch("pymongo.srv_resolver._SrvResolver.get_hosts")
+-    def test_detected_environment_warning(self, mock_get_hosts):
+-        with self._caplog.at_level(logging.WARN):
+-            normal_hosts = [
+-                "host.cosmos.azure.com",
+-                "host.docdb.amazonaws.com",
+-                "host.docdb-elastic.amazonaws.com",
+-            ]
+-            srv_hosts = ["mongodb+srv://<test>:<test>@" + s for s in normal_hosts]
+-            multi_host = (
+-                "host.cosmos.azure.com,host.docdb.amazonaws.com,host.docdb-elastic.amazonaws.com"
+-            )
+-            for host in normal_hosts:
+-                with self.assertWarns(UserWarning):
+-                    MongoClient(host)
+-            for host in srv_hosts:
+-                mock_get_hosts.return_value = [(host, 1)]
+-                with self.assertWarns(UserWarning):
+-                    MongoClient(host)
+-            with self.assertWarns(UserWarning):
+-                MongoClient(multi_host)
+-
+ 
+ class TestClient(IntegrationTest):
+     def test_multiple_uris(self):

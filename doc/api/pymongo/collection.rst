@@ -7,7 +7,6 @@
    .. autodata:: pymongo.ASCENDING
    .. autodata:: pymongo.DESCENDING
    .. autodata:: pymongo.GEO2D
-   .. autodata:: pymongo.GEOHAYSTACK
    .. autodata:: pymongo.GEOSPHERE
    .. autodata:: pymongo.HASHED
    .. autodata:: pymongo.TEXT
@@ -47,8 +46,8 @@
       .. automethod:: aggregate
       .. automethod:: aggregate_raw_batches
       .. automethod:: watch
-      .. automethod:: find(filter=None, projection=None, skip=0, limit=0, no_cursor_timeout=False, cursor_type=CursorType.NON_TAILABLE, sort=None, allow_partial_results=False, oplog_replay=False, modifiers=None, batch_size=0, manipulate=True, collation=None, hint=None, max_scan=None, max_time_ms=None, max=None, min=None, return_key=False, show_record_id=False, snapshot=False, comment=None, session=None)
-      .. automethod:: find_raw_batches(filter=None, projection=None, skip=0, limit=0, no_cursor_timeout=False, cursor_type=CursorType.NON_TAILABLE, sort=None, allow_partial_results=False, oplog_replay=False, modifiers=None, batch_size=0, manipulate=True, collation=None, hint=None, max_scan=None, max_time_ms=None, max=None, min=None, return_key=False, show_record_id=False, snapshot=False, comment=None)
+      .. automethod:: find(filter=None, projection=None, skip=0, limit=0, no_cursor_timeout=False, cursor_type=CursorType.NON_TAILABLE, sort=None, allow_partial_results=False, oplog_replay=False, batch_size=0, collation=None, hint=None, max_scan=None, max_time_ms=None, max=None, min=None, return_key=False, show_record_id=False, snapshot=False, comment=None, session=None, allow_disk_use=None)
+      .. automethod:: find_raw_batches(filter=None, projection=None, skip=0, limit=0, no_cursor_timeout=False, cursor_type=CursorType.NON_TAILABLE, sort=None, allow_partial_results=False, oplog_replay=False, batch_size=0, collation=None, hint=None, max_scan=None, max_time_ms=None, max=None, min=None, return_key=False, show_record_id=False, snapshot=False, comment=None, session=None, allow_disk_use=None)
       .. automethod:: find_one(filter=None, *args, **kwargs)
       .. automethod:: find_one_and_delete
       .. automethod:: find_one_and_replace(filter, replacement, projection=None, sort=None, return_document=ReturnDocument.BEFORE, hint=None, session=None, **kwargs)
@@ -60,22 +59,15 @@
       .. automethod:: create_indexes
       .. automethod:: drop_index
       .. automethod:: drop_indexes
-      .. automethod:: reindex
       .. automethod:: list_indexes
       .. automethod:: index_information
+      .. automethod:: create_search_index
+      .. automethod:: create_search_indexes
+      .. automethod:: drop_search_index
+      .. automethod:: list_search_indexes
+      .. automethod:: update_search_index
       .. automethod:: drop
       .. automethod:: rename
       .. automethod:: options
-      .. automethod:: map_reduce
-      .. automethod:: inline_map_reduce
-      .. automethod:: parallel_scan
-      .. automethod:: initialize_unordered_bulk_op
-      .. automethod:: initialize_ordered_bulk_op
-      .. automethod:: group
-      .. automethod:: count
-      .. automethod:: insert(doc_or_docs, manipulate=True, check_keys=True, continue_on_error=False, **kwargs)
-      .. automethod:: save(to_save, manipulate=True, check_keys=True, **kwargs)
-      .. automethod:: update(spec, document, upsert=False, manipulate=False, multi=False, check_keys=True, **kwargs)
-      .. automethod:: remove(spec_or_id=None, multi=True, **kwargs)
-      .. automethod:: find_and_modify
-      .. automethod:: ensure_index
+      .. automethod:: __getitem__
+      .. automethod:: __getattr__

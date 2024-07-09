@@ -1,0 +1,73 @@
+From: =?utf-8?q?Bastien_Roucari=C3=A8s?= <rouca@debian.org>
+Date: Sat, 15 Jun 2024 19:00:43 +0000
+Subject: Fix test that fail under salsa
+
+implementation is docker
+
+forwarded: not-needed
+---
+ test/test_client.py | 51 ---------------------------------------------------
+ 1 file changed, 51 deletions(-)
+
+diff --git a/test/test_client.py b/test/test_client.py
+index 40a1831..169e0a1 100644
+--- a/test/test_client.py
++++ b/test/test_client.py
+@@ -315,57 +315,6 @@ class ClientUnitTest(unittest.TestCase):
+         )
+         self.assertEqual(c.read_preference, ReadPreference.NEAREST)
+ 
+-    def test_metadata(self):
+-        metadata = copy.deepcopy(_METADATA)
+-        metadata["application"] = {"name": "foobar"}
+-        client = MongoClient("mongodb://foo:27017/?appname=foobar&connect=false")
+-        options = client._MongoClient__options
+-        self.assertEqual(options.pool_options.metadata, metadata)
+-        client = MongoClient("foo", 27017, appname="foobar", connect=False)
+-        options = client._MongoClient__options
+-        self.assertEqual(options.pool_options.metadata, metadata)
+-        # No error
+-        MongoClient(appname="x" * 128)
+-        self.assertRaises(ValueError, MongoClient, appname="x" * 129)
+-        # Bad "driver" options.
+-        self.assertRaises(TypeError, DriverInfo, "Foo", 1, "a")
+-        self.assertRaises(TypeError, DriverInfo, version="1", platform="a")
+-        self.assertRaises(TypeError, DriverInfo)
+-        self.assertRaises(TypeError, MongoClient, driver=1)
+-        self.assertRaises(TypeError, MongoClient, driver="abc")
+-        self.assertRaises(TypeError, MongoClient, driver=("Foo", "1", "a"))
+-        # Test appending to driver info.
+-        metadata["driver"]["name"] = "PyMongo|FooDriver"
+-        metadata["driver"]["version"] = "{}|1.2.3".format(_METADATA["driver"]["version"])
+-        client = MongoClient(
+-            "foo",
+-            27017,
+-            appname="foobar",
+-            driver=DriverInfo("FooDriver", "1.2.3", None),
+-            connect=False,
+-        )
+-        options = client._MongoClient__options
+-        self.assertEqual(options.pool_options.metadata, metadata)
+-        metadata["platform"] = "{}|FooPlatform".format(_METADATA["platform"])
+-        client = MongoClient(
+-            "foo",
+-            27017,
+-            appname="foobar",
+-            driver=DriverInfo("FooDriver", "1.2.3", "FooPlatform"),
+-            connect=False,
+-        )
+-        options = client._MongoClient__options
+-        self.assertEqual(options.pool_options.metadata, metadata)
+-
+-    @mock.patch.dict("os.environ", {ENV_VAR_K8S: "1"})
+-    def test_container_metadata(self):
+-        metadata = copy.deepcopy(_METADATA)
+-        metadata["env"] = {}
+-        metadata["env"]["container"] = {"orchestrator": "kubernetes"}
+-        client = MongoClient("mongodb://foo:27017/?appname=foobar&connect=false")
+-        options = client._MongoClient__options
+-        self.assertEqual(options.pool_options.metadata["env"], metadata["env"])
+-
+     def test_kwargs_codec_options(self):
+         class MyFloatType:
+             def __init__(self, x):
