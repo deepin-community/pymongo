@@ -17,13 +17,24 @@ from __future__ import annotations
 
 import unittest
 from queue import Queue
+from test import PyMongoTestCase
 
-from mockupdb import MockupDB, going
+import pytest
+
+try:
+    from mockupdb import MockupDB, going
+
+    _HAVE_MOCKUPDB = True
+except ImportError:
+    _HAVE_MOCKUPDB = False
+
 
 from pymongo import MongoClient
 
+pytestmark = pytest.mark.mockupdb
 
-class TestGetmoreSharded(unittest.TestCase):
+
+class TestGetmoreSharded(PyMongoTestCase):
     def test_getmore_sharded(self):
         servers = [MockupDB(), MockupDB()]
 
@@ -37,11 +48,10 @@ class TestGetmoreSharded(unittest.TestCase):
             server.run()
             self.addCleanup(server.stop)
 
-        client = MongoClient(
+        client = self.simple_client(
             "mongodb://%s:%d,%s:%d"
             % (servers[0].host, servers[0].port, servers[1].host, servers[1].port)
         )
-        self.addCleanup(client.close)
         collection = client.db.collection
         cursor = collection.find()
         with going(next, cursor):

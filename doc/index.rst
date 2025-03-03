@@ -1,6 +1,11 @@
 PyMongo |release| Documentation
 ===============================
 
+.. note:: The PyMongo documentation has been migrated to the
+   `MongoDB Documentation site <https://www.mongodb.com/docs/languages/python/pymongo-driver/current>`_.
+   As of PyMongo 4.10, the ReadTheDocs site will contain the detailed changelog and API docs, while the
+   rest of the documentation will only appear on the MongoDB Documentation site.
+
 Overview
 --------
 **PyMongo** is a Python distribution containing tools for working with
@@ -15,6 +20,9 @@ everything you need to know to use **PyMongo**.
 
 :doc:`tutorial`
   Start here for a quick overview.
+
+:doc:`async-tutorial`
+  Start here for a quick overview of the asynchronous API.
 
 :doc:`examples/index`
   Examples of how to perform specific tasks.
@@ -92,8 +100,6 @@ pull request.
 Changes
 -------
 See the :doc:`changelog` for a full list of changes to PyMongo.
-For older versions of the documentation please see the
-`archive list <http://api.mongodb.org/python/>`_.
 
 About This Documentation
 ------------------------
@@ -105,8 +111,8 @@ following command from the root directory of the **PyMongo** source:
 
 .. code-block:: bash
 
-  $ pip install tox
-  $ tox -m doc
+  $ pip install hatch
+  $ hatch run doc:build
 
 Indices and tables
 ------------------
@@ -121,6 +127,7 @@ Indices and tables
    atlas
    installation
    tutorial
+   async-tutorial
    examples/index
    faq
    compatibility-policy

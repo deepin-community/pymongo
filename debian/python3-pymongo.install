@@ -1,3 +1,8 @@
+usr/lib/python3*/*-packages/pymongo*.dist-info
 usr/lib/python3*/*-packages/pymongo/*.py
 usr/lib/python3*/*-packages/pymongo/*.typed
 usr/lib/python3*/*-packages/pymongo/__pycache__
+usr/lib/python3*/*-packages/pymongo/asynchronous/*.py
+usr/lib/python3*/*-packages/pymongo/asynchronous/__pycache__
+usr/lib/python3*/*-packages/pymongo/synchronous/*.py
+usr/lib/python3*/*-packages/pymongo/synchronous/__pycache__

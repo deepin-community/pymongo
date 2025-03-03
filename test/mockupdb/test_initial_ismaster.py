@@ -15,21 +15,31 @@ from __future__ import annotations
 
 import time
 import unittest
+from test import PyMongoTestCase
 
-from mockupdb import MockupDB, wait_until
+import pytest
+
+try:
+    from mockupdb import MockupDB, wait_until
+
+    _HAVE_MOCKUPDB = True
+except ImportError:
+    _HAVE_MOCKUPDB = False
+
 
 from pymongo import MongoClient
 
+pytestmark = pytest.mark.mockupdb
 
-class TestInitialIsMaster(unittest.TestCase):
+
+class TestInitialIsMaster(PyMongoTestCase):
     def test_initial_ismaster(self):
         server = MockupDB()
         server.run()
         self.addCleanup(server.stop)
 
         start = time.time()
-        client = MongoClient(server.uri)
-        self.addCleanup(client.close)
+        client = self.simple_client(server.uri)
 
         # A single ismaster is enough for the client to be connected.
         self.assertFalse(client.nodes)
