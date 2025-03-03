@@ -24,13 +24,12 @@ from test.utils import (
     CMAPListener,
     ensure_all_connected,
     repl_set_step_down,
-    rs_or_single_client,
 )
 
 from bson import SON
 from pymongo import monitoring
-from pymongo.collection import Collection
 from pymongo.errors import NotPrimaryError
+from pymongo.synchronous.collection import Collection
 from pymongo.write_concern import WriteConcern
 
 
@@ -43,7 +42,7 @@ class TestConnectionsSurvivePrimaryStepDown(IntegrationTest):
     def setUpClass(cls):
         super().setUpClass()
         cls.listener = CMAPListener()
-        cls.client = rs_or_single_client(
+        cls.client = cls.unmanaged_rs_or_single_client(
             event_listeners=[cls.listener], retryWrites=False, heartbeatFrequencyMS=500
         )
 

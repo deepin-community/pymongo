@@ -27,7 +27,7 @@ from unittest.mock import patch
 sys.path[0:0] = [""]
 
 from test import IntegrationTest, client_context, unittest
-from test.utils import joinall, one, rs_client, rs_or_single_client, single_client
+from test.utils import joinall, one
 
 import gridfs
 from bson.binary import Binary
@@ -41,8 +41,8 @@ from pymongo.errors import (
     ServerSelectionTimeoutError,
     WriteConcernError,
 )
-from pymongo.mongo_client import MongoClient
 from pymongo.read_preferences import ReadPreference
+from pymongo.synchronous.mongo_client import MongoClient
 
 
 class JustWrite(threading.Thread):
@@ -282,7 +282,7 @@ class TestGridfs(IntegrationTest):
         )
         self.assertEqual(b"custom id", self.fs.open_download_stream(oid).read())
 
-    @patch("gridfs.grid_file._UPLOAD_BUFFER_CHUNKS", 3)
+    @patch("gridfs.synchronous.grid_file._UPLOAD_BUFFER_CHUNKS", 3)
     @client_context.require_failCommand_fail_point
     def test_upload_bulk_write_error(self):
         # Test BulkWriteError from insert_many is converted to an insert_one style error.
@@ -305,7 +305,7 @@ class TestGridfs(IntegrationTest):
         self.assertEqual(3, self.db.fs.chunks.count_documents({"files_id": gin._id}))
         gin.abort()
 
-    @patch("gridfs.grid_file._UPLOAD_BUFFER_CHUNKS", 10)
+    @patch("gridfs.synchronous.grid_file._UPLOAD_BUFFER_CHUNKS", 10)
     def test_upload_batching(self):
         with self.fs.open_upload_stream("test_file", chunk_size_bytes=1) as gin:
             gin.write(b"s" * (10 - 1))
@@ -345,7 +345,7 @@ class TestGridfs(IntegrationTest):
         self.assertTrue(iterate_file(fstr))
 
     def test_gridfs_lazy_connect(self):
-        client = MongoClient("badhost", connect=False, serverSelectionTimeoutMS=0)
+        client = self.single_client("badhost", connect=False, serverSelectionTimeoutMS=0)
         cdb = client.db
         gfs = gridfs.GridFSBucket(cdb)
         self.assertRaises(ServerSelectionTimeoutError, gfs.delete, 0)
@@ -391,7 +391,7 @@ class TestGridfs(IntegrationTest):
     def test_unacknowledged(self):
         # w=0 is prohibited.
         with self.assertRaises(ConfigurationError):
-            gridfs.GridFSBucket(rs_or_single_client(w=0).pymongo_test)
+            gridfs.GridFSBucket(self.rs_or_single_client(w=0).pymongo_test)
 
     def test_rename(self):
         _id = self.fs.upload_from_stream("first_name", b"testing")
@@ -401,7 +401,7 @@ class TestGridfs(IntegrationTest):
         self.assertRaises(NoFile, self.fs.open_download_stream_by_name, "first_name")
         self.assertEqual(b"testing", self.fs.open_download_stream_by_name("second_name").read())
 
-    @patch("gridfs.grid_file._UPLOAD_BUFFER_SIZE", 5)
+    @patch("gridfs.synchronous.grid_file._UPLOAD_BUFFER_SIZE", 5)
     def test_abort(self):
         gin = self.fs.open_upload_stream("test_filename", chunk_size_bytes=5)
         gin.write(b"test1")
@@ -489,7 +489,7 @@ class TestGridfsBucketReplicaSet(IntegrationTest):
         client_context.client.drop_database("gfsbucketreplica")
 
     def test_gridfs_replica_set(self):
-        rsc = rs_client(w=client_context.w, read_preference=ReadPreference.SECONDARY)
+        rsc = self.rs_client(w=client_context.w, read_preference=ReadPreference.SECONDARY)
 
         gfs = gridfs.GridFSBucket(rsc.gfsbucketreplica, "gfsbucketreplicatest")
         oid = gfs.upload_from_stream("test_filename", b"foo")
@@ -498,7 +498,7 @@ class TestGridfsBucketReplicaSet(IntegrationTest):
 
     def test_gridfs_secondary(self):
         secondary_host, secondary_port = one(self.client.secondaries)
-        secondary_connection = single_client(
+        secondary_connection = self.single_client(
             secondary_host, secondary_port, read_preference=ReadPreference.SECONDARY
         )
 
@@ -513,7 +513,7 @@ class TestGridfsBucketReplicaSet(IntegrationTest):
         # Should detect it's connected to secondary and not attempt to
         # create index.
         secondary_host, secondary_port = one(self.client.secondaries)
-        client = single_client(
+        client = self.single_client(
             secondary_host, secondary_port, read_preference=ReadPreference.SECONDARY, connect=False
         )
 

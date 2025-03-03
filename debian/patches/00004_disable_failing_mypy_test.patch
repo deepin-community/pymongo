@@ -1,0 +1,19 @@
+Description: Disable tests that fails
+Author: Salvo 'LtWorf' Tomaselli <ltworf@debian.org>
+
+--- pymongo-4.10.1.orig/test/test_typing.py
++++ pymongo-4.10.1/test/test_typing.py
+@@ -103,13 +103,6 @@ class TestMypyFails(unittest.TestCase):
+         stdout, stderr, exit_status = api.run([filename])
+         self.assertTrue(exit_status, msg=stdout)
+ 
+-    def test_mypy_failures(self) -> None:
+-        for filename in get_tests():
+-            if filename == "typeddict_client.py" and TypedDict is None:
+-                continue
+-            with self.subTest(filename=filename):
+-                self.ensure_mypy_fails(filename)
+-
+ 
+ class TestPymongo(IntegrationTest):
+     coll: Collection

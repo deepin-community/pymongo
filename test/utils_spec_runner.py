@@ -29,7 +29,6 @@ from test.utils import (
     camel_to_snake_args,
     parse_spec_options,
     prepare_spec_arguments,
-    rs_client,
 )
 from typing import List
 
@@ -38,14 +37,16 @@ from bson.binary import Binary
 from bson.int64 import Int64
 from bson.son import SON
 from gridfs import GridFSBucket
-from pymongo import client_session
-from pymongo.command_cursor import CommandCursor
-from pymongo.cursor import Cursor
 from pymongo.errors import BulkWriteError, OperationFailure, PyMongoError
 from pymongo.read_concern import ReadConcern
 from pymongo.read_preferences import ReadPreference
 from pymongo.results import BulkWriteResult, _WriteResult
+from pymongo.synchronous import client_session
+from pymongo.synchronous.command_cursor import CommandCursor
+from pymongo.synchronous.cursor import Cursor
 from pymongo.write_concern import WriteConcern
+
+_IS_SYNC = True
 
 
 class SpecRunnerThread(threading.Thread):
@@ -88,8 +89,8 @@ class SpecRunner(IntegrationTest):
     listener: EventListener
 
     @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
+    def _setup_class(cls):
+        super()._setup_class()
         cls.mongos_clients = []
 
         # Speed up the tests by decreasing the heartbeat frequency.
@@ -97,9 +98,11 @@ class SpecRunner(IntegrationTest):
         cls.knobs.enable()
 
     @classmethod
-    def tearDownClass(cls):
+    def _tearDown_class(cls):
         cls.knobs.disable()
-        super().tearDownClass()
+        for client in cls.mongos_clients:
+            client.close()
+        super()._tearDown_class()
 
     def setUp(self):
         super().setUp()
@@ -325,7 +328,7 @@ class SpecRunner(IntegrationTest):
             result = Binary(result.read())
 
         if isinstance(result, Cursor) or isinstance(result, CommandCursor):
-            return list(result)
+            return result.to_list()
 
         return result
 
@@ -522,7 +525,7 @@ class SpecRunner(IntegrationTest):
                 host = client_context.MULTI_MONGOS_LB_URI
             elif client_context.is_mongos:
                 host = client_context.mongos_seeds()
-        client = rs_client(
+        client = self.rs_client(
             h=host, event_listeners=[listener, pool_listener, server_listener], **client_options
         )
         self.scenario_client = client
@@ -580,7 +583,7 @@ class SpecRunner(IntegrationTest):
                 read_preference=ReadPreference.PRIMARY,
                 read_concern=ReadConcern("local"),
             )
-            actual_data = list(outcome_coll.find(sort=[("_id", 1)]))
+            actual_data = (outcome_coll.find(sort=[("_id", 1)])).to_list()
 
             # The expected data needs to be the left hand side here otherwise
             # CompareType(Binary) doesn't work.

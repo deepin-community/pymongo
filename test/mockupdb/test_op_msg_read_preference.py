@@ -16,9 +16,18 @@ from __future__ import annotations
 import copy
 import itertools
 import unittest
+from test import PyMongoTestCase
 from typing import Any
 
-from mockupdb import CommandBase, MockupDB, going
+import pytest
+
+try:
+    from mockupdb import CommandBase, MockupDB, going
+
+    _HAVE_MOCKUPDB = True
+except ImportError:
+    _HAVE_MOCKUPDB = False
+
 from operations import operations  # type: ignore[import]
 
 from pymongo import MongoClient, ReadPreference
@@ -28,8 +37,10 @@ from pymongo.read_preferences import (
     read_pref_mode_from_name,
 )
 
+pytestmark = pytest.mark.mockupdb
 
-class OpMsgReadPrefBase(unittest.TestCase):
+
+class OpMsgReadPrefBase(PyMongoTestCase):
     single_mongod = False
     primary: MockupDB
     secondary: MockupDB
@@ -43,8 +54,7 @@ class OpMsgReadPrefBase(unittest.TestCase):
         setattr(cls, test_name, test)
 
     def setup_client(self, read_preference):
-        client = MongoClient(self.primary.uri, read_preference=read_preference)
-        self.addCleanup(client.close)
+        client = self.simple_client(self.primary.uri, read_preference=read_preference)
         return client
 
 
@@ -105,12 +115,13 @@ class TestOpMsgReplicaSet(OpMsgReadPrefBase):
             setattr(cls, test_name, test)
 
     def setup_client(self, read_preference):
-        client = MongoClient(self.primary.uri, replicaSet="rs", read_preference=read_preference)
+        client = self.simple_client(
+            self.primary.uri, replicaSet="rs", read_preference=read_preference
+        )
 
         # Run a command on a secondary to discover the topology. This ensures
         # that secondaryPreferred commands will select the secondary.
         client.admin.command("ismaster", read_preference=ReadPreference.SECONDARY)
-        self.addCleanup(client.close)
         return client
 
 

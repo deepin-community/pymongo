@@ -14,14 +14,24 @@
 from __future__ import annotations
 
 import unittest
+from test import PyMongoTestCase
 
-from mockupdb import MockupDB
+import pytest
+
+try:
+    from mockupdb import MockupDB
+
+    _HAVE_MOCKUPDB = True
+except ImportError:
+    _HAVE_MOCKUPDB = False
 
 from pymongo import MongoClient
 from pymongo.errors import ServerSelectionTimeoutError
 
+pytestmark = pytest.mark.mockupdb
 
-class TestAuthRecoveringMember(unittest.TestCase):
+
+class TestAuthRecoveringMember(PyMongoTestCase):
     def test_auth_recovering_member(self):
         # Test that we don't attempt auth against a recovering RS member.
         server = MockupDB()
@@ -39,11 +49,9 @@ class TestAuthRecoveringMember(unittest.TestCase):
         server.run()
         self.addCleanup(server.stop)
 
-        client = MongoClient(
+        client = self.simple_client(
             server.uri, replicaSet="rs", serverSelectionTimeoutMS=100, socketTimeoutMS=100
         )
-
-        self.addCleanup(client.close)
 
         # Should see there's no primary or secondary and raise selection timeout
         # error. If it raises AutoReconnect we know it actually tried the
